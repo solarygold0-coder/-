@@ -27,4 +27,4 @@ jobs:
           name: Saudi-Patient-Records-Windows
           path: |
             release/تثبيت_نظام_سجلات_المرضى.exe
-            release/سجلات_المرضى/**
+            release/App/**

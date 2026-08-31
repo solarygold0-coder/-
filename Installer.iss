@@ -21,7 +21,7 @@ MinVersion=6.1sp1
 Name: "arabic"; MessagesFile: "compiler:Languages\Arabic.isl"
 
 [Files]
-Source: "release\سجلات_المرضى\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "release\App\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
