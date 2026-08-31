@@ -30,7 +30,7 @@
 powershell -ExecutionPolicy Bypass -File .\build-windows.ps1
 ```
 
-الناتج: `release\سجلات_المرضى\سجلات_المرضى.exe`. يمكن بناء المثبت بواسطة Inno Setup 6 من ملف `Installer.iss`.
+الناتج: `release\App\سجلات_المرضى.exe`. يمكن بناء المثبت بواسطة Inno Setup 6 من ملف `Installer.iss`.
 
 ## ملاحظة نظامية
 
