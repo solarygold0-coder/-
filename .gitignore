@@ -1,8 +1,8 @@
-bin/
-obj/
 .vs/
+**/bin/
+**/obj/
+packages/
 release/
 *.user
 *.suo
-*.db
-*.db-log
+*.pdb

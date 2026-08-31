@@ -1,0 +1,30 @@
+name: Windows EXE
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore and build
+        shell: powershell
+        run: .\build-windows.ps1
+      - name: Ensure Inno Setup
+        shell: powershell
+        run: |
+          if (-not (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --no-progress -y
+          }
+      - name: Build installer
+        shell: powershell
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" .\Installer.iss'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Saudi-Patient-Records-Windows
+          path: |
+            release/تثبيت_نظام_سجلات_المرضى.exe
+            release/App/**
