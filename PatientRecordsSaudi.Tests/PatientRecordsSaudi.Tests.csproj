@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{0A00AB2A-15AD-4F06-909D-36407839DF71}</ProjectGuid>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>PatientRecordsSaudi.Tests</RootNamespace>
+    <AssemblyName>PatientRecordsSaudi.Tests</AssemblyName>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <LangVersion>7.3</LangVersion>
+    <OutputPath>bin\$(Configuration)\</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" /><Reference Include="System.Core" />
+  </ItemGroup>
+  <ItemGroup><Compile Include="Program.cs" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="..\PatientRecordsSaudi\PatientRecordsSaudi.csproj"><Project>{D7F9D8F4-5209-4BF0-AB7B-1C7B4F2289ED}</Project><Name>PatientRecordsSaudi</Name></ProjectReference></ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>
