@@ -166,12 +166,20 @@ namespace PatientRecordsSaudi.Services
             foreach (Patient p in collection.Find(x => x.NormalizedName == normalized)) candidates[p.Id] = p;
             if (!string.IsNullOrEmpty(phone)) foreach (Patient p in collection.Find(x => x.Mobile == phone)) candidates[p.Id] = p;
             if (birth.HasValue) foreach (Patient p in collection.FindAll().Where(x => x.DateOfBirth.HasValue && x.DateOfBirth.Value.Date == birth.Value.Date)) candidates[p.Id] = p;
-            return candidates.Values.FirstOrDefault(p => (!exceptId.HasValue || p.Id != exceptId.Value) && NamesLikelyMatch(normalized, p.NormalizedName) && ((birth.HasValue && p.DateOfBirth.HasValue && birth.Value.Date == p.DateOfBirth.Value.Date) || (!string.IsNullOrEmpty(phone) && p.Mobile == phone)));
+            return candidates.Values.FirstOrDefault(p =>
+            {
+                if (exceptId.HasValue && p.Id == exceptId.Value) return false; string existingName = SaudiValidation.NormalizeArabicName(p.NormalizedName); bool sameBirth = birth.HasValue && p.DateOfBirth.HasValue && birth.Value.Date == p.DateOfBirth.Value.Date, samePhone = !string.IsNullOrEmpty(phone) && p.Mobile == phone;
+                if (normalized == existingName) return sameBirth || samePhone; if (samePhone && NamesLikelyMatch(normalized, existingName)) return true; return sameBirth && SameFirstAndLastName(normalized, existingName);
+            });
         }
         private static bool NamesLikelyMatch(string left, string right)
         {
             string a = (left ?? "").Replace(" ", ""), b = SaudiValidation.NormalizeArabicName(right).Replace(" ", ""); if (a == b) return true; if (a.Length < 5 || b.Length < 5 || Math.Abs(a.Length - b.Length) > 2) return false;
             int[] previous = Enumerable.Range(0, b.Length + 1).ToArray(), current = new int[b.Length + 1]; for (int i = 1; i <= a.Length; i++) { current[0] = i; for (int j = 1; j <= b.Length; j++) current[j] = Math.Min(Math.Min(current[j - 1] + 1, previous[j] + 1), previous[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1)); var swap = previous; previous = current; current = swap; } return previous[b.Length] <= 2;
+        }
+        private static bool SameFirstAndLastName(string left, string right)
+        {
+            string[] a = (left ?? "").Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries), b = (right ?? "").Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries); return a.Length >= 2 && b.Length >= 2 && a[0] == b[0] && a[a.Length - 1] == b[b.Length - 1];
         }
 
         public List<Patient> SearchPatients(string mode, string term, bool includeArchived, string sort)
