@@ -16,7 +16,8 @@ namespace PatientRecordsSaudi.Services
         public string CreateBackup(string destinationFolder, AppDatabase database)
         {
             Directory.CreateDirectory(destinationFolder); database.Checkpoint();
-            string zip = Path.Combine(destinationFolder, "نسخة_سجلات_المراجعين_" + DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) + ".zip");
+            string zip = Path.Combine(destinationFolder, "نسخة_سجلات_المراجعين_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff", CultureInfo.InvariantCulture) + ".zip");
+            if (File.Exists(zip)) zip = Path.Combine(destinationFolder, "نسخة_سجلات_المراجعين_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff", CultureInfo.InvariantCulture) + "_" + Guid.NewGuid().ToString("N").Substring(0, 6) + ".zip");
             string temp = Path.Combine(Path.GetTempPath(), "PatientRecordsBackup_" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(temp);
             try
             {
@@ -46,6 +47,7 @@ namespace PatientRecordsSaudi.Services
                 string safetyDb = currentDb + ".before_restore_" + stamp, safetyAuth = currentAuth + ".before_restore_" + stamp; if (File.Exists(currentDb)) File.Copy(currentDb, safetyDb, true); if (File.Exists(currentAuth)) File.Copy(currentAuth, safetyAuth, true);
                 try { File.Copy(dbFile, currentDb, true); File.Copy(authFile, currentAuth, true); }
                 catch { if (File.Exists(safetyDb)) File.Copy(safetyDb, currentDb, true); if (File.Exists(safetyAuth)) File.Copy(safetyAuth, currentAuth, true); throw; }
+                finally { TryDelete(safetyDb); TryDelete(safetyAuth); }
             }
             finally { try { Directory.Delete(temp, true); } catch { } }
         }
@@ -65,5 +67,6 @@ namespace PatientRecordsSaudi.Services
         private static string ManifestValue(string text, string key) { string line = text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault(x => x.StartsWith(key + "=", StringComparison.Ordinal)); if (line == null) throw new InvalidDataException("بيانات سلامة النسخة ناقصة."); return line.Substring(key.Length + 1).Trim(); }
         private static string Hash(string path) { using (var sha = SHA256.Create()) using (var input = File.OpenRead(path)) return BitConverter.ToString(sha.ComputeHash(input)).Replace("-", "").ToLowerInvariant(); }
         private static void CopyShared(string source, string destination) { using (var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete)) using (var output = new FileStream(destination, FileMode.Create, FileAccess.Write, FileShare.None)) input.CopyTo(output); }
+        private static void TryDelete(string path) { try { if (File.Exists(path)) File.Delete(path); } catch { } }
     }
 }

@@ -48,12 +48,20 @@ namespace PatientRecordsSaudi.Services
         public DateTime? LockoutUntilUtc { get; set; }
     }
 
+    public sealed class SecurityAuditEvent
+    {
+        public DateTime OccurredAt { get; set; }
+        public string UserName { get; set; }
+        public string Action { get; set; }
+        public string Details { get; set; }
+    }
+
     public sealed class AppSecurity
     {
         private const int Iterations = 180000;
-        private readonly string authPath;
+        private readonly string authPath, auditPath;
         private readonly JavaScriptSerializer json = new JavaScriptSerializer();
-        public AppSecurity(string appDataPath) { authPath = Path.Combine(appDataPath, "auth.dat"); }
+        public AppSecurity(string appDataPath) { authPath = Path.Combine(appDataPath, "auth.dat"); auditPath = Path.Combine(appDataPath, "security.audit"); TryDelete(authPath + ".bak"); TryDelete(authPath + ".legacy"); }
         public bool IsConfigured { get { return File.Exists(authPath); } }
 
         public SecuritySession Configure(string displayName, string password)
@@ -63,7 +71,7 @@ namespace PatientRecordsSaudi.Services
             string dbPassword = Convert.ToBase64String(RandomBytes(32));
             var store = new SecurityStore { Version = 2, Users = new List<SecurityUserRecord>() };
             store.Users.Add(CreateRecord("admin", CleanDisplayName(displayName), "مدير", password, dbPassword));
-            SaveStore(store);
+            SaveStore(store); TryLog("admin", "إعداد الحماية", "إنشاء حساب المدير الأول");
             return new SecuritySession { Username = "admin", DisplayName = CleanDisplayName(displayName), Role = "مدير", DatabasePassword = dbPassword };
         }
 
@@ -73,16 +81,17 @@ namespace PatientRecordsSaudi.Services
             if (IsLegacyFile()) return LoginAndUpgradeLegacy(username, password);
             SecurityStore store = LoadStore(); string key = NormalizeUsername(username);
             SecurityUserRecord user = store.Users.FirstOrDefault(x => x.Username == key);
-            if (user == null || !user.IsActive) throw new UnauthorizedAccessException("اسم المستخدم أو كلمة المرور غير صحيحة.");
-            if (user.LockoutUntilUtc.HasValue && user.LockoutUntilUtc.Value > DateTime.UtcNow) throw new UnauthorizedAccessException("الحساب مقفل مؤقتًا بسبب محاولات دخول متكررة. حاول بعد " + user.LockoutUntilUtc.Value.ToLocalTime().ToString("HH:mm") + ".");
-            if (user.LockoutUntilUtc.HasValue) { user.LockoutUntilUtc = null; user.FailedLoginCount = 0; }
+            if (user == null || !user.IsActive) { TryLog(key, "محاولة دخول مرفوضة", user == null ? "حساب غير موجود" : "حساب معطل"); throw new UnauthorizedAccessException("اسم المستخدم أو كلمة المرور غير صحيحة."); }
+            if (user.LockoutUntilUtc.HasValue && user.LockoutUntilUtc.Value > DateTime.UtcNow) { TryLog(key, "محاولة دخول أثناء القفل", "الحساب مقفل مؤقتًا"); throw new UnauthorizedAccessException("الحساب مقفل مؤقتًا بسبب محاولات دخول متكررة. حاول بعد " + user.LockoutUntilUtc.Value.ToLocalTime().ToString("HH:mm") + "."); }
+            bool clearedExpiredLock = user.LockoutUntilUtc.HasValue; if (clearedExpiredLock) { user.LockoutUntilUtc = null; user.FailedLoginCount = 0; }
             string dbPassword;
             if (!TryUnwrap(user, password, out dbPassword))
             {
-                user.FailedLoginCount++; if (user.FailedLoginCount >= 5) { user.LockoutUntilUtc = DateTime.UtcNow.AddMinutes(15); user.FailedLoginCount = 0; } SaveStore(store);
+                user.FailedLoginCount++; if (user.FailedLoginCount >= 5) { user.LockoutUntilUtc = DateTime.UtcNow.AddMinutes(15); user.FailedLoginCount = 0; } SaveStore(store); TryLog(key, user.LockoutUntilUtc.HasValue ? "قفل حساب" : "فشل تسجيل دخول", user.LockoutUntilUtc.HasValue ? "خمس محاولات غير صحيحة" : "كلمة مرور غير صحيحة");
                 throw new UnauthorizedAccessException(user.LockoutUntilUtc.HasValue && user.LockoutUntilUtc.Value > DateTime.UtcNow ? "تم قفل الحساب لمدة 15 دقيقة بعد خمس محاولات غير صحيحة." : "اسم المستخدم أو كلمة المرور غير صحيحة.");
             }
-            if (user.FailedLoginCount != 0 || user.LockoutUntilUtc.HasValue) { user.FailedLoginCount = 0; user.LockoutUntilUtc = null; SaveStore(store); }
+            if (clearedExpiredLock || user.FailedLoginCount != 0 || user.LockoutUntilUtc.HasValue) { user.FailedLoginCount = 0; user.LockoutUntilUtc = null; SaveStore(store); }
+            TryLog(key, "تسجيل دخول ناجح", user.Role);
             return Session(user, dbPassword);
         }
 
@@ -98,14 +107,14 @@ namespace PatientRecordsSaudi.Services
             SecurityStore store = LoadStore(); string key = NormalizeUsername(username);
             if (key.Length < 3) throw new ArgumentException("اسم المستخدم يجب ألا يقل عن 3 خانات.");
             if (store.Users.Any(x => x.Username == key)) throw new InvalidOperationException("اسم المستخدم موجود مسبقًا.");
-            store.Users.Add(CreateRecord(key, CleanDisplayName(displayName), role, password, session.DatabasePassword)); SaveStore(store);
+            store.Users.Add(CreateRecord(key, CleanDisplayName(displayName), role, password, session.DatabasePassword)); SaveStore(store); TryLog(session.Username, "إضافة حساب", key + " - " + role);
         }
 
         public void ResetPassword(SecuritySession session, string username, string newPassword)
         {
             RequireAdmin(session); ValidatePassword(newPassword); SecurityStore store = LoadStore();
             SecurityUserRecord old = FindUser(store, username); SecurityUserRecord replacement = CreateRecord(old.Username, old.DisplayName, old.Role, newPassword, session.DatabasePassword);
-            replacement.IsActive = old.IsActive; store.Users[store.Users.IndexOf(old)] = replacement; SaveStore(store);
+            replacement.IsActive = old.IsActive; store.Users[store.Users.IndexOf(old)] = replacement; SaveStore(store); TryLog(session.Username, "إعادة تعيين كلمة مرور", old.Username);
         }
 
         public void ChangePassword(SecuritySession session, string currentPassword, string newPassword)
@@ -113,7 +122,7 @@ namespace PatientRecordsSaudi.Services
             ValidatePassword(newPassword); SecurityStore store = LoadStore(); SecurityUserRecord old = FindUser(store, session.Username);
             string dbPassword; if (!TryUnwrap(old, currentPassword, out dbPassword)) throw new UnauthorizedAccessException("كلمة المرور الحالية غير صحيحة.");
             SecurityUserRecord replacement = CreateRecord(old.Username, old.DisplayName, old.Role, newPassword, dbPassword);
-            replacement.IsActive = old.IsActive; store.Users[store.Users.IndexOf(old)] = replacement; SaveStore(store);
+            replacement.IsActive = old.IsActive; store.Users[store.Users.IndexOf(old)] = replacement; SaveStore(store); TryLog(session.Username, "تغيير كلمة المرور", session.Username);
         }
 
         public void SetUserState(SecuritySession session, string username, bool active)
@@ -121,7 +130,7 @@ namespace PatientRecordsSaudi.Services
             RequireAdmin(session); SecurityStore store = LoadStore(); SecurityUserRecord user = FindUser(store, username);
             if (user.Username == session.Username && !active) throw new InvalidOperationException("لا يمكنك تعطيل حسابك الحالي.");
             if (!active && user.Role == "مدير" && store.Users.Count(x => x.IsActive && x.Role == "مدير") <= 1) throw new InvalidOperationException("يجب إبقاء مدير واحد فعال على الأقل.");
-            user.IsActive = active; SaveStore(store);
+            user.IsActive = active; SaveStore(store); TryLog(session.Username, active ? "تفعيل حساب" : "تعطيل حساب", user.Username);
         }
 
         private SecuritySession LoginAndUpgradeLegacy(string username, string password)
@@ -132,7 +141,7 @@ namespace PatientRecordsSaudi.Services
             if (!FixedEquals(expected, actual)) throw new UnauthorizedAccessException("اسم المستخدم أو كلمة المرور غير صحيحة.");
             string dbPassword = Convert.ToBase64String(Derive("DB|" + password, salt, 32));
             var store = new SecurityStore { Version = 2, Users = new List<SecurityUserRecord> { CreateRecord("admin", "مدير النظام", "مدير", password, dbPassword) } };
-            File.Copy(authPath, authPath + ".legacy", true); SaveStore(store); return Session(store.Users[0], dbPassword);
+            SaveStore(store); TryLog("admin", "ترقية ملف الحماية", "الانتقال إلى تنسيق الحسابات الجديد"); return Session(store.Users[0], dbPassword);
         }
 
         private SecurityUserRecord CreateRecord(string username, string displayName, string role, string password, string dbPassword)
@@ -160,6 +169,23 @@ namespace PatientRecordsSaudi.Services
 
         private SecurityStore LoadStore() { SecurityStore s = json.Deserialize<SecurityStore>(File.ReadAllText(authPath, Encoding.UTF8)); if (s == null || s.Version != 2 || s.Users == null || s.Users.Count == 0) throw new InvalidDataException("ملف الحماية غير صالح."); return s; }
         private void SaveStore(SecurityStore store) { AtomicWrite(authPath, json.Serialize(store)); }
+        private void TryLog(string userName, string action, string details)
+        {
+            try
+            {
+                List<SecurityAuditEvent> items = ReadAudit(); items.Add(new SecurityAuditEvent { OccurredAt = DateTime.Now, UserName = NormalizeUsername(userName), Action = action, Details = details ?? "" }); if (items.Count > 2000) items = items.Skip(items.Count - 2000).ToList();
+                byte[] plain = Encoding.UTF8.GetBytes(json.Serialize(items)), encrypted = ProtectedData.Protect(plain, null, DataProtectionScope.CurrentUser), temp = encrypted; string tmp = auditPath + ".tmp"; File.WriteAllBytes(tmp, temp); if (File.Exists(auditPath)) File.Replace(tmp, auditPath, null, true); else File.Move(tmp, auditPath);
+            }
+            catch { }
+        }
+        private List<SecurityAuditEvent> ReadAudit()
+        {
+            if (!File.Exists(auditPath)) return new List<SecurityAuditEvent>(); try { byte[] plain = ProtectedData.Unprotect(File.ReadAllBytes(auditPath), null, DataProtectionScope.CurrentUser); return json.Deserialize<List<SecurityAuditEvent>>(Encoding.UTF8.GetString(plain)) ?? new List<SecurityAuditEvent>(); } catch { return new List<SecurityAuditEvent>(); }
+        }
+        public void FlushPendingAudit(AppDatabase database)
+        {
+            if (database == null) return; List<SecurityAuditEvent> items = ReadAudit(); if (items.Count == 0) return; foreach (SecurityAuditEvent item in items) database.AuditSecurityEvent(item.UserName, item.Action, item.Details, item.OccurredAt); try { File.Delete(auditPath); } catch { }
+        }
         private bool IsLegacyFile() { using (var r = new StreamReader(authPath, Encoding.UTF8, true)) { int c; do { c = r.Read(); } while (c >= 0 && char.IsWhiteSpace((char)c)); return c != '{'; } }
         private static SecuritySession Session(SecurityUserRecord u, string db) { return new SecuritySession { Username = u.Username, DisplayName = u.DisplayName, Role = u.Role, DatabasePassword = db }; }
         private static SecurityUserRecord FindUser(SecurityStore s, string name) { string key = NormalizeUsername(name); SecurityUserRecord u = s.Users.FirstOrDefault(x => x.Username == key); if (u == null) throw new InvalidOperationException("المستخدم غير موجود."); return u; }
@@ -176,6 +202,7 @@ namespace PatientRecordsSaudi.Services
         private static byte[] Derive(string p, byte[] salt, int n) { using (var d = new Rfc2898DeriveBytes(p, salt, Iterations, HashAlgorithmName.SHA256)) return d.GetBytes(n); }
         private static byte[] Join(byte[] a, byte[] b) { byte[] r = new byte[a.Length + b.Length]; Buffer.BlockCopy(a, 0, r, 0, a.Length); Buffer.BlockCopy(b, 0, r, a.Length, b.Length); return r; }
         private static bool FixedEquals(byte[] a, byte[] b) { if (a == null || b == null) return false; int x = a.Length ^ b.Length; for (int i = 0; i < a.Length && i < b.Length; i++) x |= a[i] ^ b[i]; return x == 0; }
-        private static void AtomicWrite(string p, string c) { string t = p + ".tmp"; File.WriteAllText(t, c, new UTF8Encoding(false)); if (File.Exists(p)) File.Replace(t, p, p + ".bak", true); else File.Move(t, p); }
+        private static void AtomicWrite(string p, string c) { string t = p + ".tmp"; File.WriteAllText(t, c, new UTF8Encoding(false)); if (File.Exists(p)) File.Replace(t, p, null, true); else File.Move(t, p); TryDelete(p + ".bak"); TryDelete(p + ".legacy"); }
+        private static void TryDelete(string path) { try { if (File.Exists(path)) File.Delete(path); } catch { } }
     }
 }

@@ -1,5 +1,5 @@
 #define MyAppName "نظام إدارة سجلات المراجعين"
-#define MyAppVersion "1.2.0"
+#define MyAppVersion "1.3.0"
 #define MyAppExeName "سجلات_المراجعين.exe"
 
 [Setup]
@@ -21,10 +21,11 @@ MinVersion=6.1sp1
 Name: "arabic"; MessagesFile: "compiler:Languages\Arabic.isl"
 
 [Files]
-Source: "release\App\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "release\App\*"; DestDir: "{app}"; Excludes: "*.pdb"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [InstallDelete]
 Type: files; Name: "{app}\سجلات_المرضى.exe"
+Type: files; Name: "{app}\سجلات_المراجعين.pdb"
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

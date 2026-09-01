@@ -21,7 +21,7 @@ namespace PatientRecordsSaudi.UI
         private readonly DataGridView patientGrid = UiKit.Grid(), appointmentGrid = UiKit.Grid(), taskGrid = UiKit.Grid(), inventoryGrid = UiKit.Grid();
         private readonly DataGridView todayAppointments = UiKit.Grid(), dueTasks = UiKit.Grid();
         private readonly ComboBox searchMode = UiKit.Combo("الكل", "رقم الملف", "الهوية/الإقامة", "الاسم", "رقم الجوال", "المدينة"), sortMode = UiKit.Combo("رقم الملف", "الاسم", "الأحدث", "آخر مراجعة"), appointmentFilter = UiKit.Combo("القادمة", "اليوم", "هذا الأسبوع", "الكل");
-        private readonly TextBox searchText = UiKit.TextBox(150), clinicName = UiKit.TextBox(150), clinicPhone = UiKit.TextBox(30), clinicAddress = UiKit.TextBox(250);
+        private readonly TextBox searchText = UiKit.TextBox(150), clinicName = UiKit.TextBox(150), clinicPhone = UiKit.TextBox(30), clinicAddress = UiKit.TextBox(250), autoBackupDirectory = UiKit.TextBox(500);
         private readonly TextBox visitTypesText = UiKit.TextBox(1000), appointmentStatusesText = UiKit.TextBox(1000), taskPrioritiesText = UiKit.TextBox(500), genderOptionsText = UiKit.TextBox(500), bloodTypesText = UiKit.TextBox(500);
         private readonly ComboBox workStart = UiKit.Combo("06:00", "07:00", "08:00", "09:00", "10:00"), workEnd = UiKit.Combo("14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00"), backupHours = UiKit.Combo("1", "2", "4", "6", "8", "12", "24");
         private readonly Label backupStatus = new Label { AutoSize = true, Font = UiKit.BoldFont, ForeColor = Color.DimGray, Margin = new Padding(8, 12, 8, 8) };
@@ -91,7 +91,8 @@ namespace PatientRecordsSaudi.UI
         {
             var tab = NewTab("المواعيد"); var tools = ToolPanel();
             Button add = UiKit.Button("موعد جديد", NewAppointment, false), edit = UiKit.Button("تعديل", EditAppointment, false), delete = UiKit.Button("نقل للمحذوفات", DeleteAppointment, true); add.Enabled = edit.Enabled = !session.IsReadOnly; delete.Enabled = session.IsAdmin;
-            tools.Controls.Add(add); tools.Controls.Add(edit); tools.Controls.Add(UiKit.Button("طباعة الموعد", PrintAppointment, false)); tools.Controls.Add(UiKit.Button("تصدير CSV", ExportAppointmentsCsv, false)); tools.Controls.Add(delete); tools.Controls.Add(UiKit.Label("عرض:", true)); tools.Controls.Add(appointmentFilter); tools.Controls.Add(UiKit.Button("تحديث", delegate { LoadAppointments(); }, false));
+            Button export = UiKit.Button("تصدير CSV", ExportAppointmentsCsv, false); export.Enabled = session.IsAdmin;
+            tools.Controls.Add(add); tools.Controls.Add(edit); tools.Controls.Add(UiKit.Button("طباعة الموعد", PrintAppointment, false)); tools.Controls.Add(export); tools.Controls.Add(delete); tools.Controls.Add(UiKit.Label("عرض:", true)); tools.Controls.Add(appointmentFilter); tools.Controls.Add(UiKit.Button("تحديث", delegate { LoadAppointments(); }, false));
             tab.Controls.Add(tools); ConfigureAppointmentGrid(appointmentGrid); tab.Controls.Add(appointmentGrid); appointmentGrid.BringToFront(); appointmentFilter.SelectedIndexChanged += delegate { LoadAppointments(); }; WirePatientOpen(appointmentGrid, "PatientId"); return tab;
         }
 
@@ -117,18 +118,20 @@ namespace PatientRecordsSaudi.UI
             var body = new TableLayoutPanel { Dock = DockStyle.Top, Padding = new Padding(28), ColumnCount = 2, AutoSize = true };
             body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25)); body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 75));
             AddSetting(body, "اسم المنشأة", clinicName); AddSetting(body, "هاتف المنشأة", clinicPhone); AddSetting(body, "عنوان المنشأة", clinicAddress); AddSetting(body, "بداية الدوام", workStart); AddSetting(body, "نهاية الدوام", workEnd); AddSetting(body, "نسخة تلقائية كل (ساعة)", backupHours);
-            var logoActions = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.RightToLeft }; logoActions.Controls.Add(UiKit.Button("اختيار شعار", ChooseClinicLogo, false)); logoActions.Controls.Add(UiKit.Button("إزالة الشعار", RemoveClinicLogo, true)); logoActions.Controls.Add(clinicLogoStatus); AddSetting(body, "شعار الطباعة", logoActions);
+            var backupLocation = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.RightToLeft }; autoBackupDirectory.Width = 500; autoBackupDirectory.ReadOnly = true; Button chooseBackupDirectory = UiKit.Button("اختيار مجلد خارجي", ChooseAutoBackupDirectory, false); chooseBackupDirectory.Enabled = session.IsAdmin; backupLocation.Controls.Add(chooseBackupDirectory); backupLocation.Controls.Add(autoBackupDirectory); AddSetting(body, "مجلد النسخ التلقائي", backupLocation);
+            var logoActions = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.RightToLeft }; Button chooseLogo = UiKit.Button("اختيار شعار", ChooseClinicLogo, false), removeLogo = UiKit.Button("إزالة الشعار", RemoveClinicLogo, true); chooseLogo.Enabled = removeLogo.Enabled = session.IsAdmin; logoActions.Controls.Add(chooseLogo); logoActions.Controls.Add(removeLogo); logoActions.Controls.Add(clinicLogoStatus); AddSetting(body, "شعار الطباعة", logoActions);
             ConfigureLookupText(visitTypesText); ConfigureLookupText(appointmentStatusesText); ConfigureLookupText(taskPrioritiesText); ConfigureLookupText(genderOptionsText); ConfigureLookupText(bloodTypesText);
             AddSetting(body, "أنواع الزيارة (سطر لكل قيمة)", visitTypesText); AddSetting(body, "حالات الموعد", appointmentStatusesText); AddSetting(body, "أولويات المهام", taskPrioritiesText); AddSetting(body, "خيارات الجنس", genderOptionsText); AddSetting(body, "فصائل الدم", bloodTypesText);
             var actions = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.RightToLeft };
             Button save = UiKit.Button("حفظ الإعدادات", SaveSettings, false), restore = UiKit.Button("استعادة نسخة", RestoreBackup, true), export = UiKit.Button("تصدير قائمة CSV", ExportCsv, false), users = UiKit.Button("حسابات الموظفين", ManageUsers, false), closures = UiKit.Button("الإجازات وأيام الإغلاق", ManageClosures, false), recycle = UiKit.Button("المحذوفات", OpenRecycleBin, false);
-            Button audit = UiKit.Button("سجل العمليات", ShowAudit, false), exportAudit = UiKit.Button("تصدير السجل CSV", ExportAuditCsv, false); save.Enabled = restore.Enabled = export.Enabled = users.Enabled = closures.Enabled = recycle.Enabled = audit.Enabled = exportAudit.Enabled = session.IsAdmin;
-            actions.Controls.Add(save); actions.Controls.Add(UiKit.Button("إنشاء نسخة احتياطية", CreateBackup, false)); actions.Controls.Add(restore); actions.Controls.Add(export); actions.Controls.Add(users); actions.Controls.Add(closures); actions.Controls.Add(recycle); actions.Controls.Add(UiKit.Button("تغيير كلمة المرور", ChangePassword, false)); actions.Controls.Add(audit); actions.Controls.Add(exportAudit);
+            Button audit = UiKit.Button("سجل العمليات", ShowAudit, false), exportAudit = UiKit.Button("تصدير السجل CSV", ExportAuditCsv, false), createBackup = UiKit.Button("إنشاء نسخة احتياطية", CreateBackup, false), purgeAttachments = UiKit.Button("إتلاف المرفقات المحذوفة القديمة", PurgeDeletedAttachments, true); save.Enabled = restore.Enabled = export.Enabled = users.Enabled = closures.Enabled = recycle.Enabled = audit.Enabled = exportAudit.Enabled = createBackup.Enabled = purgeAttachments.Enabled = session.IsAdmin;
+            actions.Controls.Add(save); actions.Controls.Add(createBackup); actions.Controls.Add(restore); actions.Controls.Add(export); actions.Controls.Add(users); actions.Controls.Add(closures); actions.Controls.Add(recycle); actions.Controls.Add(UiKit.Button("تغيير كلمة المرور", ChangePassword, false)); actions.Controls.Add(audit); actions.Controls.Add(exportAudit); actions.Controls.Add(purgeAttachments);
             int r = body.RowCount++; body.Controls.Add(new Label(), 0, r); body.Controls.Add(actions, 1, r);
             var privacy = new Label { Text = "تنبيه خصوصية: البيانات الصحية حساسة. قاعدة البيانات مشفرة، والنسخ الاحتياطية تحتوي بيانات مشفرة. امنع مشاركة كلمة المرور أو ملفات النسخ مع غير المخولين.", AutoSize = true, MaximumSize = new Size(850, 0), Font = UiKit.BoldFont, ForeColor = UiKit.Danger, Margin = new Padding(8, 24, 8, 8) };
             r = body.RowCount++; body.Controls.Add(new Label(), 0, r); body.Controls.Add(privacy, 1, r); r = body.RowCount++; body.Controls.Add(new Label(), 0, r); body.Controls.Add(backupStatus, 1, r); tab.Controls.Add(body);
-            AppSettings s = database.GetSettings(); clinicName.Text = s.ClinicName; clinicPhone.Text = s.ClinicPhone; clinicAddress.Text = s.ClinicAddress; workStart.SelectedItem = MinutesText(s.WorkDayStartMinutes); workEnd.SelectedItem = MinutesText(s.WorkDayEndMinutes); backupHours.SelectedItem = s.BackupIntervalHours.ToString();
-            visitTypesText.Lines = s.VisitTypes.ToArray(); appointmentStatusesText.Lines = s.AppointmentStatuses.ToArray(); taskPrioritiesText.Lines = s.TaskPriorities.ToArray(); genderOptionsText.Lines = s.GenderOptions.ToArray(); bloodTypesText.Lines = s.BloodTypes.ToArray(); clinicLogoStatus.Text = string.IsNullOrWhiteSpace(s.ClinicLogoStoredId) ? "لا يوجد شعار" : "الشعار الحالي: " + s.ClinicLogoFileName; backupStatus.Text = "حالة النسخ: " + s.LastBackupStatus; return tab;
+            AppSettings s = database.GetSettings(); clinicName.Text = s.ClinicName; clinicPhone.Text = s.ClinicPhone; clinicAddress.Text = s.ClinicAddress; workStart.SelectedItem = MinutesText(s.WorkDayStartMinutes); workEnd.SelectedItem = MinutesText(s.WorkDayEndMinutes); backupHours.SelectedItem = s.BackupIntervalHours.ToString(); autoBackupDirectory.Text = string.IsNullOrWhiteSpace(s.AutoBackupDirectory) ? "داخل الجهاز (اختر قرصًا خارجيًا للحماية من تعطل القرص)" : s.AutoBackupDirectory;
+            visitTypesText.Lines = s.VisitTypes.ToArray(); appointmentStatusesText.Lines = s.AppointmentStatuses.ToArray(); taskPrioritiesText.Lines = s.TaskPriorities.ToArray(); genderOptionsText.Lines = s.GenderOptions.ToArray(); bloodTypesText.Lines = s.BloodTypes.ToArray(); clinicLogoStatus.Text = string.IsNullOrWhiteSpace(s.ClinicLogoStoredId) ? "لا يوجد شعار" : "الشعار الحالي: " + s.ClinicLogoFileName; backupStatus.Text = "حالة النسخ: " + s.LastBackupStatus;
+            if (!session.IsAdmin) foreach (Control c in new Control[] { clinicName, clinicPhone, clinicAddress, workStart, workEnd, backupHours, visitTypesText, appointmentStatusesText, taskPrioritiesText, genderOptionsText, bloodTypesText }) c.Enabled = false; return tab;
         }
 
         private static TabPage NewTab(string text) { return new TabPage(text) { BackColor = UiKit.Background, Padding = new Padding(6) }; }
@@ -204,7 +207,8 @@ namespace PatientRecordsSaudi.UI
         private void OpenSelectedPatient(DataGridView grid) { Patient p = SelectedPatient(grid); if (p == null) { UiKit.ShowError("اختر مراجعًا أولًا."); return; } OpenPatient(p); }
         private void OpenPatient(Patient patient)
         {
-            using (var form = new PatientForm(database, patient, session.IsReadOnly)) if (form.ShowDialog(this) == DialogResult.OK) { try { database.UpdatePatient(form.Result); LoadAll(); } catch (Exception ex) { UiKit.ShowError(ex.Message); } }
+            bool viewOnly = session.IsReadOnly || patient.IsArchived;
+            using (var form = new PatientForm(database, patient, viewOnly)) if (form.ShowDialog(this) == DialogResult.OK) { try { database.UpdatePatient(form.Result); LoadAll(); } catch (Exception ex) { UiKit.ShowError(ex.Message); } }
         }
         private void WirePatientOpen(DataGridView grid, string idColumn)
         {
@@ -240,9 +244,9 @@ namespace PatientRecordsSaudi.UI
         private void DeleteAppointment(object s, EventArgs e) { Appointment a = SelectedAppointment(); if (a == null) return; if (UiKit.Confirm("نقل الموعد إلى المحذوفات مع إمكانية استعادته؟", "تأكيد")) { database.DeleteAppointment(a.Id); LoadAll(); } }
         private void NewTask(object s, EventArgs e) { ShowTask(null, null); }
         private void EditTask(object s, EventArgs e) { PatientTask t = SelectedTask(); if (t == null) { UiKit.ShowError("اختر مهمة أولًا."); return; } ShowTask(t, null); }
-        private void ShowTask(PatientTask t, long? n) { using (var f = new TaskForm(database, t, n)) if (f.ShowDialog(this) == DialogResult.OK) { if (t == null) database.AddTask(f.Result); else database.UpdateTask(f.Result); LoadAll(); } }
-        private void ToggleTask(object s, EventArgs e) { PatientTask t = SelectedTask(); if (t == null) return; t.IsCompleted = !t.IsCompleted; database.UpdateTask(t); LoadAll(); }
-        private void DeleteTask(object s, EventArgs e) { PatientTask t = SelectedTask(); if (t != null && UiKit.Confirm("نقل المهمة إلى المحذوفات مع إمكانية استعادتها؟", "تأكيد")) { database.DeleteTask(t.Id); LoadAll(); } }
+        private void ShowTask(PatientTask t, long? n) { using (var f = new TaskForm(database, t, n)) if (f.ShowDialog(this) == DialogResult.OK) { try { if (t == null) database.AddTask(f.Result); else database.UpdateTask(f.Result); LoadAll(); } catch (Exception ex) { UiKit.ShowError(ex.Message); } } }
+        private void ToggleTask(object s, EventArgs e) { PatientTask t = SelectedTask(); if (t == null) return; try { t.IsCompleted = !t.IsCompleted; database.UpdateTask(t); LoadAll(); } catch (Exception ex) { UiKit.ShowError(ex.Message); } }
+        private void DeleteTask(object s, EventArgs e) { PatientTask t = SelectedTask(); if (t != null && UiKit.Confirm("نقل المهمة إلى المحذوفات مع إمكانية استعادتها؟", "تأكيد")) { try { database.DeleteTask(t.Id); LoadAll(); } catch (Exception ex) { UiKit.ShowError(ex.Message); } } }
 
         private void ArchiveInventoryPatient(object s, EventArgs e)
         {
@@ -260,13 +264,17 @@ namespace PatientRecordsSaudi.UI
             if (string.IsNullOrWhiteSpace(clinicName.Text)) { UiKit.ShowError("اسم المنشأة مطلوب."); return; }
             try
             {
-                AppSettings set = database.GetSettings(); set.ClinicName = clinicName.Text.Trim(); set.ClinicPhone = clinicPhone.Text.Trim(); set.ClinicAddress = clinicAddress.Text.Trim(); set.WorkDayStartMinutes = ParseMinutes(workStart.Text); set.WorkDayEndMinutes = ParseMinutes(workEnd.Text); int hours; if (!int.TryParse(backupHours.Text, out hours)) hours = 4; set.BackupIntervalHours = hours;
+                AppSettings set = database.GetSettings(); set.ClinicName = clinicName.Text.Trim(); set.ClinicPhone = clinicPhone.Text.Trim(); set.ClinicAddress = clinicAddress.Text.Trim(); set.WorkDayStartMinutes = ParseMinutes(workStart.Text); set.WorkDayEndMinutes = ParseMinutes(workEnd.Text); int hours; if (!int.TryParse(backupHours.Text, out hours)) hours = 4; set.BackupIntervalHours = hours; set.AutoBackupDirectory = autoBackupDirectory.Text.StartsWith("داخل الجهاز", StringComparison.Ordinal) ? "" : autoBackupDirectory.Text.Trim();
                 set.VisitTypes = LookupLines(visitTypesText); set.AppointmentStatuses = LookupLines(appointmentStatusesText); set.TaskPriorities = LookupLines(taskPrioritiesText); set.GenderOptions = LookupLines(genderOptionsText); set.BloodTypes = LookupLines(bloodTypesText);
                 database.SaveSettings(set); Text = "نظام إدارة سجلات المراجعين - " + set.ClinicName; MessageBox.Show("تم حفظ الإعدادات.", "تم", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex) { UiKit.ShowError(ex.Message); }
         }
         private static List<string> LookupLines(TextBox box) { return box.Lines.Select(x => (x ?? "").Trim()).Where(x => x.Length > 0).ToList(); }
+        private void ChooseAutoBackupDirectory(object sender, EventArgs e)
+        {
+            using (var folder = new FolderBrowserDialog { Description = "اختر مجلدًا على قرص خارجي أو موقع نسخ آمن" }) if (folder.ShowDialog(this) == DialogResult.OK) autoBackupDirectory.Text = folder.SelectedPath;
+        }
         private void ChooseClinicLogo(object sender, EventArgs e)
         {
             using (var open = new OpenFileDialog { Filter = "صور الشعار|*.png;*.jpg;*.jpeg", Title = "اختر شعار المنشأة" }) if (open.ShowDialog(this) == DialogResult.OK)
@@ -285,7 +293,15 @@ namespace PatientRecordsSaudi.UI
         }
         private void CreateBackup(object s, EventArgs e)
         {
+            if (!session.IsAdmin) { UiKit.ShowError("إنشاء نسخة احتياطية يدوية متاح للمدير فقط."); return; }
             using (var d = new FolderBrowserDialog { Description = "اختر مجلد حفظ النسخة الاحتياطية" }) if (d.ShowDialog(this) == DialogResult.OK) { try { string p = backups.CreateBackup(d.SelectedPath, database); UpdateBackupStatus("نجحت في " + DateTime.Now.ToString("yyyy/MM/dd HH:mm"), DateTime.Now); MessageBox.Show("تم إنشاء النسخة الاحتياطية وفحصها:\n" + p, "نجاح", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign); } catch (Exception ex) { UpdateBackupStatus("فشلت: " + ex.Message, null); UiKit.ShowError("تعذر إنشاء النسخة: " + ex.Message); } }
+        }
+        private void PurgeDeletedAttachments(object sender, EventArgs e)
+        {
+            if (!UiKit.Confirm("سيتم الإتلاف النهائي للمرفقات التي حُذفت منذ أكثر من 90 يومًا، ولن يمكن استعادتها. تأكد من سياسة الاحتفاظ في المنشأة. هل تريد المتابعة؟", "إتلاف نهائي")) return;
+            if (!UiKit.Confirm("تأكيد أخير: هذه العملية غير قابلة للتراجع.", "تأكيد الإتلاف")) return;
+            try { int count = database.PurgeDeletedAttachments(DateTime.Now.AddDays(-90)); MessageBox.Show("تم إتلاف " + count + " مرفقًا محذوفًا قديمًا.", "تم", MessageBoxButtons.OK, MessageBoxIcon.Information); }
+            catch (Exception ex) { UiKit.ShowError(ex.Message); }
         }
         private void RestoreBackup(object s, EventArgs e)
         {
@@ -297,18 +313,19 @@ namespace PatientRecordsSaudi.UI
             if (!UiKit.Confirm("سيحتوي ملف CSV على بيانات شخصية حساسة وغير مشفرة. احفظه في مكان آمن. هل تريد المتابعة؟", "تحذير خصوصية")) return;
             using (var save = new SaveFileDialog { Filter = "CSV (*.csv)|*.csv", FileName = "قائمة_المراجعين_" + DateTime.Today.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + ".csv" }) if (save.ShowDialog(this) == DialogResult.OK)
             {
-                try { var sb = new StringBuilder(); sb.AppendLine("رقم الملف,الاسم,الهوية أو الإقامة,الجوال,المدينة,الحالة"); foreach (Patient p in database.GetAllPatients(true)) sb.AppendLine(Csv(p.FileNumber.ToString()) + "," + Csv(p.FullName) + "," + Csv(p.NationalId) + "," + Csv(p.Mobile) + "," + Csv(p.City) + "," + Csv(p.StatusText)); File.WriteAllText(save.FileName, sb.ToString(), new UTF8Encoding(true)); MessageBox.Show("تم التصدير.", "تم", MessageBoxButtons.OK, MessageBoxIcon.Information); }
+                try { var sb = new StringBuilder(); sb.AppendLine("رقم الملف,الاسم,الهوية أو الإقامة,الجوال,المدينة,الحالة"); foreach (Patient p in database.GetAllPatients(true)) sb.AppendLine(Csv(p.FileNumber.ToString()) + "," + Csv(p.FullName) + "," + Csv(p.NationalId) + "," + Csv(p.Mobile) + "," + Csv(p.City) + "," + Csv(p.StatusText)); File.WriteAllText(save.FileName, sb.ToString(), new UTF8Encoding(true)); database.Audit("تصدير قائمة المراجعين", "Export", Path.GetFileName(save.FileName), null, "CSV"); database.Checkpoint(); MessageBox.Show("تم التصدير.", "تم", MessageBoxButtons.OK, MessageBoxIcon.Information); }
                 catch (Exception ex) { UiKit.ShowError(ex.Message); }
             }
         }
         private static string Csv(string s) { string v = s ?? ""; if (v.Length > 0 && (v[0] == '=' || v[0] == '+' || v[0] == '-' || v[0] == '@' || v[0] == '\t' || v[0] == '\r')) v = "'" + v; return "\"" + v.Replace("\"", "\"\"") + "\""; }
         private void ExportAppointmentsCsv(object sender, EventArgs e)
         {
+            if (!session.IsAdmin) { UiKit.ShowError("تصدير البيانات متاح للمدير فقط."); return; }
             if (!UiKit.Confirm("سيحتوي الملف على بيانات مواعيد شخصية وغير مشفرة. هل تريد المتابعة؟", "تحذير خصوصية")) return;
             var rows = appointmentGrid.DataSource as BindingList<Appointment>; if (rows == null || rows.Count == 0) { UiKit.ShowError("لا توجد مواعيد ظاهرة للتصدير."); return; }
             using (var save = new SaveFileDialog { Filter = "CSV (*.csv)|*.csv", FileName = "المواعيد_" + DateTime.Today.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + ".csv" }) if (save.ShowDialog(this) == DialogResult.OK)
             {
-                try { var sb = new StringBuilder(); sb.AppendLine("رقم الملف,اسم المراجع,العنوان,نوع الزيارة,التاريخ,الوقت,المدة,الحالة,الملاحظات"); foreach (Appointment a in rows) sb.AppendLine(Csv(a.FileNumber.ToString()) + "," + Csv(a.PatientName) + "," + Csv(a.Title) + "," + Csv(a.VisitType) + "," + Csv(a.StartsAt.ToString("yyyy/MM/dd")) + "," + Csv(a.TimeText) + "," + Csv(a.DurationMinutes.ToString()) + "," + Csv(a.Status) + "," + Csv(a.Notes)); File.WriteAllText(save.FileName, sb.ToString(), new UTF8Encoding(true)); MessageBox.Show("تم تصدير المواعيد الظاهرة.", "تم", MessageBoxButtons.OK, MessageBoxIcon.Information); }
+                try { var sb = new StringBuilder(); sb.AppendLine("رقم الملف,اسم المراجع,العنوان,نوع الزيارة,التاريخ,الوقت,المدة,الحالة,الملاحظات"); foreach (Appointment a in rows) sb.AppendLine(Csv(a.FileNumber.ToString()) + "," + Csv(a.PatientName) + "," + Csv(a.Title) + "," + Csv(a.VisitType) + "," + Csv(a.StartsAt.ToString("yyyy/MM/dd")) + "," + Csv(a.TimeText) + "," + Csv(a.DurationMinutes.ToString()) + "," + Csv(a.Status) + "," + Csv(a.Notes)); File.WriteAllText(save.FileName, sb.ToString(), new UTF8Encoding(true)); database.Audit("تصدير المواعيد", "Export", Path.GetFileName(save.FileName), null, "الصفوف: " + rows.Count); database.Checkpoint(); MessageBox.Show("تم تصدير المواعيد الظاهرة.", "تم", MessageBoxButtons.OK, MessageBoxIcon.Information); }
                 catch (Exception ex) { UiKit.ShowError(ex.Message); }
             }
         }
@@ -317,7 +334,7 @@ namespace PatientRecordsSaudi.UI
             if (!UiKit.Confirm("سجل العمليات قد يحتوي بيانات شخصية وغير مشفرة. هل تريد المتابعة؟", "تحذير خصوصية")) return;
             using (var save = new SaveFileDialog { Filter = "CSV (*.csv)|*.csv", FileName = "سجل_العمليات_" + DateTime.Today.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + ".csv" }) if (save.ShowDialog(this) == DialogResult.OK)
             {
-                try { var sb = new StringBuilder(); sb.AppendLine("الوقت,الموظف,العملية,نوع السجل,رقم الملف,التفاصيل,الجهاز"); foreach (AuditEntry a in database.GetRecentAudit(10000)) sb.AppendLine(Csv(a.OccurredAt.ToString("yyyy/MM/dd HH:mm:ss")) + "," + Csv(a.UserName) + "," + Csv(a.Action) + "," + Csv(a.EntityType) + "," + Csv(a.FileNumber.HasValue ? a.FileNumber.Value.ToString() : "") + "," + Csv(a.Details) + "," + Csv(a.MachineName)); File.WriteAllText(save.FileName, sb.ToString(), new UTF8Encoding(true)); MessageBox.Show("تم تصدير سجل العمليات.", "تم", MessageBoxButtons.OK, MessageBoxIcon.Information); }
+                try { var sb = new StringBuilder(); sb.AppendLine("الوقت,الموظف,العملية,نوع السجل,رقم الملف,التفاصيل,الجهاز"); foreach (AuditEntry a in database.GetAllAudit()) sb.AppendLine(Csv(a.OccurredAt.ToString("yyyy/MM/dd HH:mm:ss")) + "," + Csv(a.UserName) + "," + Csv(a.Action) + "," + Csv(a.EntityType) + "," + Csv(a.FileNumber.HasValue ? a.FileNumber.Value.ToString() : "") + "," + Csv(a.Details) + "," + Csv(a.MachineName)); File.WriteAllText(save.FileName, sb.ToString(), new UTF8Encoding(true)); database.Audit("تصدير سجل العمليات", "Export", Path.GetFileName(save.FileName), null, "تصدير كامل"); database.Checkpoint(); MessageBox.Show("تم تصدير سجل العمليات كاملًا.", "تم", MessageBoxButtons.OK, MessageBoxIcon.Information); }
                 catch (Exception ex) { UiKit.ShowError(ex.Message); }
             }
         }
@@ -335,15 +352,16 @@ namespace PatientRecordsSaudi.UI
         private void PrintPatientSummary(object sender, EventArgs e)
         {
             Patient p = SelectedPatient(patientGrid); if (p == null) { UiKit.ShowError("اختر مراجعًا أولًا."); return; } AppSettings set = database.GetSettings(); byte[] logo = database.GetClinicLogo(); List<Appointment> appointments = database.GetPatientAppointments(p.Id).Take(6).ToList(); List<PatientTask> tasks = database.GetPatientTasks(p.Id).Take(6).ToList();
+            database.Audit("معاينة طباعة ملخص مراجع", "Print", p.Id.ToString(), p.FileNumber, p.FullName); database.Checkpoint();
             var doc = new PrintDocument { DocumentName = "ملخص_مراجع_" + p.FileNumber }; doc.PrintPage += delegate(object sender2, PrintPageEventArgs ev)
             {
                 Rectangle r = ev.MarginBounds; using (var titleFont = new Font("Tahoma", 17, FontStyle.Bold)) using (var headFont = new Font("Tahoma", 11, FontStyle.Bold)) using (var textFont = new Font("Tahoma", 10)) using (var right = new StringFormat { Alignment = StringAlignment.Far, FormatFlags = StringFormatFlags.DirectionRightToLeft }) using (var center = new StringFormat { Alignment = StringAlignment.Center, FormatFlags = StringFormatFlags.DirectionRightToLeft })
                 {
                     int y = DrawClinicLogo(ev.Graphics, r, logo, r.Top); ev.Graphics.DrawString(set.ClinicName, titleFont, Brushes.Black, new RectangleF(r.Left, y, r.Width, 34), center); y += 42; ev.Graphics.DrawString("ملخص إداري للمراجع", headFont, Brushes.Black, new RectangleF(r.Left, y, r.Width, 28), center); y += 38;
                     string[] info = { "رقم الملف: " + p.FileNumber, "الاسم: " + p.FullName, "الهوية/الإقامة: " + p.NationalId, "الجوال: " + p.Mobile, "المدينة والعنوان: " + p.City + " — " + p.Address, "الحالة: " + p.StatusText, "آخر مراجعة مسجلة: " + (p.LastVisitAt.HasValue ? p.LastVisitAt.Value.ToString("yyyy/MM/dd") : "لا توجد") };
-                    foreach (string line in info) { ev.Graphics.DrawString(line, textFont, Brushes.Black, new RectangleF(r.Left, y, r.Width, 24), right); y += 25; }
-                    y += 10; ev.Graphics.DrawString("آخر المواعيد", headFont, Brushes.Black, new RectangleF(r.Left, y, r.Width, 26), right); y += 28; foreach (Appointment a in appointments) { ev.Graphics.DrawString(a.DateText + " — " + a.TimeText + " — " + a.Title + " — " + a.Status, textFont, Brushes.Black, new RectangleF(r.Left, y, r.Width, 23), right); y += 24; }
-                    y += 8; ev.Graphics.DrawString("آخر المهام", headFont, Brushes.Black, new RectangleF(r.Left, y, r.Width, 26), right); y += 28; foreach (PatientTask t in tasks) { ev.Graphics.DrawString(t.DueText + " — " + t.Title + " — " + t.CompletionText, textFont, Brushes.Black, new RectangleF(r.Left, y, r.Width, 23), right); y += 24; }
+                    foreach (string line in info) DrawRightLine(ev.Graphics, line, textFont, r, ref y, right, 25);
+                    y += 10; ev.Graphics.DrawString("آخر المواعيد", headFont, Brushes.Black, new RectangleF(r.Left, y, r.Width, 26), right); y += 28; foreach (Appointment a in appointments) DrawRightLine(ev.Graphics, a.DateText + " — " + a.TimeText + " — " + a.Title + " — " + a.Status, textFont, r, ref y, right, 24);
+                    y += 8; ev.Graphics.DrawString("آخر المهام", headFont, Brushes.Black, new RectangleF(r.Left, y, r.Width, 26), right); y += 28; foreach (PatientTask t in tasks) DrawRightLine(ev.Graphics, t.DueText + " — " + t.Title + " — " + t.CompletionText, textFont, r, ref y, right, 24);
                 }
             };
             using (var preview = new PrintPreviewDialog { Document = doc, Width = 1000, Height = 750, RightToLeft = RightToLeft.Yes }) preview.ShowDialog(this);
@@ -352,19 +370,25 @@ namespace PatientRecordsSaudi.UI
         private void PrintAppointment(object s, EventArgs e)
         {
             Appointment a = SelectedAppointment(); if (a == null) { UiKit.ShowError("اختر موعدًا للطباعة."); return; } Patient p = database.GetPatient(a.PatientId); AppSettings set = database.GetSettings(); byte[] logo = database.GetClinicLogo();
+            database.Audit("معاينة طباعة موعد", "Print", a.Id.ToString(), a.FileNumber, a.Title); database.Checkpoint();
             var doc = new PrintDocument { DocumentName = "موعد_" + a.FileNumber }; doc.PrintPage += delegate(object sender, PrintPageEventArgs ev)
             {
                 Rectangle r = ev.MarginBounds; var titleFont = new Font("Tahoma", 18, FontStyle.Bold); var headFont = new Font("Tahoma", 12, FontStyle.Bold); var textFont = new Font("Tahoma", 11);
                 var center = new StringFormat { Alignment = StringAlignment.Center, FormatFlags = StringFormatFlags.DirectionRightToLeft }; var right = new StringFormat { Alignment = StringAlignment.Far, FormatFlags = StringFormatFlags.DirectionRightToLeft };
                 int y = DrawClinicLogo(ev.Graphics, r, logo, r.Top); ev.Graphics.DrawString(set.ClinicName, titleFont, Brushes.Black, new RectangleF(r.Left, y, r.Width, 36), center); y += 48;
                 ev.Graphics.DrawString("إشعار موعد", headFont, Brushes.Black, new RectangleF(r.Left, y, r.Width, 30), center); y += 55;
-                string[] lines = { "رقم الملف: " + a.FileNumber, "اسم المراجع: " + a.PatientName, "رقم الهوية/الإقامة: " + (p == null ? "" : p.NationalId), "نوع الموعد: " + a.Title + " - " + a.VisitType, "التاريخ الميلادي: " + a.DateText + " (" + SaudiValidation.ArabicDayName(a.StartsAt) + ")", "الوقت: " + a.TimeText, "مدة الموعد: " + a.DurationMinutes + " دقيقة", "الحالة: " + a.Status };
-                foreach (string line in lines) { ev.Graphics.DrawString(line, textFont, Brushes.Black, new RectangleF(r.Left, y, r.Width, 28), right); y += 34; }
+                string[] lines = { "رقم الملف: " + a.FileNumber, "اسم المراجع: " + a.PatientName, "رقم الهوية/الإقامة: " + (p == null ? "" : MaskIdentity(p.NationalId)), "نوع الموعد: " + a.Title + " - " + a.VisitType, "التاريخ الميلادي: " + a.DateText + " (" + SaudiValidation.ArabicDayName(a.StartsAt) + ")", "الوقت: " + a.TimeText, "مدة الموعد: " + a.DurationMinutes + " دقيقة", "الحالة: " + a.Status };
+                foreach (string line in lines) DrawRightLine(ev.Graphics, line, textFont, r, ref y, right, 34);
                 y += 25; ev.Graphics.DrawString("يرجى الحضور قبل الموعد بـ 15 دقيقة.", headFont, Brushes.Black, new RectangleF(r.Left, y, r.Width, 30), center); y += 55;
                 ev.Graphics.DrawString(set.ClinicAddress + "   " + set.ClinicPhone, textFont, Brushes.Black, new RectangleF(r.Left, y, r.Width, 30), center);
                 titleFont.Dispose(); headFont.Dispose(); textFont.Dispose(); center.Dispose(); right.Dispose();
             };
             using (var preview = new PrintPreviewDialog { Document = doc, Width = 1000, Height = 750, RightToLeft = RightToLeft.Yes }) preview.ShowDialog(this);
+        }
+        private static string MaskIdentity(string value) { string v = value ?? ""; return v.Length <= 4 ? v : new string('*', v.Length - 4) + v.Substring(v.Length - 4); }
+        private static void DrawRightLine(Graphics graphics, string text, Font font, Rectangle bounds, ref int y, StringFormat format, int minimumHeight)
+        {
+            int height = Math.Max(minimumHeight, (int)Math.Ceiling(graphics.MeasureString(text ?? "", font, bounds.Width, format).Height) + 4); graphics.DrawString(text ?? "", font, Brushes.Black, new RectangleF(bounds.Left, y, bounds.Width, height), format); y += height;
         }
         private static int DrawClinicLogo(Graphics graphics, Rectangle bounds, byte[] logoBytes, int y)
         {
@@ -382,37 +406,46 @@ namespace PatientRecordsSaudi.UI
         private void ConfigureNotification()
         {
             notify.Icon = SystemIcons.Information; notify.Visible = true; notify.Text = "سجلات المراجعين";
-            var menu = new ContextMenuStrip(); menu.Items.Add("فتح البرنامج", null, delegate { UnlockAndShow(); }); menu.Items.Add("نسخة احتياطية الآن", null, delegate { RunScheduledBackup(true); }); menu.Items.Add("إنهاء البرنامج", null, delegate { forceExit = true; Close(); }); notify.ContextMenuStrip = menu; notify.DoubleClick += delegate { UnlockAndShow(); };
+            var menu = new ContextMenuStrip(); menu.Items.Add("فتح البرنامج", null, delegate { UnlockAndShow(); }); ToolStripItem manualBackup = menu.Items.Add("نسخة احتياطية الآن", null, delegate { if (session.IsAdmin) RunScheduledBackup(true); else UiKit.ShowError("النسخ اليدوي متاح للمدير فقط."); }); manualBackup.Enabled = session.IsAdmin; menu.Items.Add("إنهاء البرنامج", null, delegate { forceExit = true; Close(); }); notify.ContextMenuStrip = menu; notify.DoubleClick += delegate { UnlockAndShow(); };
             notify.BalloonTipClicked += delegate { if (!UnlockAndShow()) return; if (notificationPatientId.HasValue) { Patient p = database.GetPatient(notificationPatientId.Value); if (p != null) OpenPatient(p); } };
             reminderTimer.Interval = 60000; reminderTimer.Tick += delegate { CheckReminders(); }; reminderTimer.Start();
             try { using (RegistryKey run = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true)) if (run != null) run.SetValue("SaudiPatientRecords", "\"" + Application.ExecutablePath + "\""); } catch { }
         }
         private void CheckReminders()
         {
-            DateTime now = DateTime.Now, soon = now.AddMinutes(5), missed = now.AddMinutes(-30); Appointment a = database.GetNextUnnotifiedAppointment(missed, soon);
-            if (a != null) { database.MarkAppointmentNotified(a.Id); notificationPatientId = a.PatientId; notify.BalloonTipTitle = "موعد قريب"; notify.BalloonTipText = locked || !Visible ? "يوجد موعد قريب. افتح البرنامج لعرض التفاصيل." : a.PatientName + " — " + a.Title + " — " + a.TimeText; notify.ShowBalloonTip(10000); return; }
-            PatientTask t = database.GetNextUnnotifiedTask(missed, soon); if (t != null) { database.MarkTaskNotified(t.Id); notificationPatientId = t.PatientId; notify.BalloonTipTitle = "تنبيه مهمة"; notify.BalloonTipText = locked || !Visible ? "توجد مهمة مستحقة. افتح البرنامج لعرض التفاصيل." : t.PatientName + " — " + t.Title; notify.ShowBalloonTip(10000); }
+            try
+            {
+                DateTime now = DateTime.Now, soon = now.AddMinutes(5), missed = now.AddDays(-7); List<Appointment> appointments = database.GetUnnotifiedAppointments(missed, soon, 20); List<PatientTask> tasks = database.GetUnnotifiedTasks(missed, soon, 20);
+                if (appointments.Count == 0 && tasks.Count == 0) return;
+                Appointment firstAppointment = appointments.FirstOrDefault(); PatientTask firstTask = tasks.FirstOrDefault(); notificationPatientId = firstAppointment != null ? firstAppointment.PatientId : firstTask.PatientId;
+                notify.BalloonTipTitle = "تنبيهات المواعيد والمهام";
+                if (locked || !Visible) notify.BalloonTipText = "يوجد " + appointments.Count + " موعد و" + tasks.Count + " مهمة تحتاج المراجعة. افتح البرنامج للتفاصيل.";
+                else if (firstAppointment != null) notify.BalloonTipText = firstAppointment.PatientName + " — " + firstAppointment.Title + " — " + firstAppointment.TimeText + (appointments.Count + tasks.Count > 1 ? " — وإجمالي " + (appointments.Count + tasks.Count) + " تنبيه" : "");
+                else notify.BalloonTipText = firstTask.PatientName + " — " + firstTask.Title + (tasks.Count > 1 ? " — وإجمالي " + tasks.Count + " مهام" : "");
+                notify.ShowBalloonTip(10000); foreach (Appointment a in appointments) database.MarkAppointmentNotified(a.Id); foreach (PatientTask t in tasks) database.MarkTaskNotified(t.Id);
+            }
+            catch { }
         }
 
         private void LockApplication() { if (locked) return; locked = true; Hide(); notify.BalloonTipTitle = "تم قفل البرنامج"; notify.BalloonTipText = "تم القفل تلقائيًا لحماية البيانات. انقر لفتح البرنامج."; notify.ShowBalloonTip(5000); }
         private bool UnlockAndShow()
         {
-            if (locked) { using (var login = new LoginForm(security, session.Username)) { if (login.ShowDialog() != DialogResult.OK) return false; session = login.Session; database.SetCurrentUser(session.DisplayName); locked = false; activity.Touch(); } }
+            if (locked) { using (var login = new LoginForm(security, session.Username)) { if (login.ShowDialog() != DialogResult.OK) return false; session = login.Session; database.SetCurrentSession(session.DisplayName, session.Role); security.FlushPendingAudit(database); locked = false; activity.Touch(); } }
             Show(); WindowState = FormWindowState.Maximized; Activate(); return true;
         }
 
         private void RunScheduledBackup(bool force)
         {
             AppSettings s = database.GetSettings(); if (!force && s.LastAutoBackupAt.HasValue && DateTime.Now - s.LastAutoBackupAt.Value < TimeSpan.FromHours(s.BackupIntervalHours)) return;
-            try { string folder = Path.Combine(database.DataDirectory, "AutoBackups"); string path = backups.CreateBackup(folder, database); UpdateBackupStatus("نجحت في " + DateTime.Now.ToString("yyyy/MM/dd HH:mm") + " — " + Path.GetFileName(path), DateTime.Now); PruneBackups(folder); if (force) { notify.BalloonTipTitle = "النسخ الاحتياطي"; notify.BalloonTipText = "تم إنشاء النسخة بنجاح."; notify.ShowBalloonTip(5000); } }
-            catch (Exception ex) { UpdateBackupStatus("فشلت: " + ex.Message, null); notify.BalloonTipTitle = "فشل النسخ الاحتياطي"; notify.BalloonTipText = "افتح البرنامج لمراجعة حالة النسخ."; notify.ShowBalloonTip(8000); }
+            try { string folder = string.IsNullOrWhiteSpace(s.AutoBackupDirectory) ? Path.Combine(database.DataDirectory, "AutoBackups") : s.AutoBackupDirectory; string path = backups.CreateBackup(folder, database); UpdateBackupStatus("نجحت في " + DateTime.Now.ToString("yyyy/MM/dd HH:mm") + " — " + Path.GetFileName(path), DateTime.Now); PruneBackups(folder); if (force) { notify.BalloonTipTitle = "النسخ الاحتياطي"; notify.BalloonTipText = "تم إنشاء النسخة بنجاح."; notify.ShowBalloonTip(5000); } }
+            catch (Exception ex) { try { UpdateBackupStatus("فشلت: " + ex.Message, null); } catch { } notify.BalloonTipTitle = "فشل النسخ الاحتياطي"; notify.BalloonTipText = "افتح البرنامج لمراجعة حالة النسخ."; notify.ShowBalloonTip(8000); }
         }
-        private void UpdateBackupStatus(string status, DateTime? successAt) { AppSettings s = database.GetSettings(); if (successAt.HasValue) s.LastAutoBackupAt = successAt; s.LastBackupStatus = status; database.SaveSettings(s); backupStatus.Text = "حالة النسخ: " + status; }
+        private void UpdateBackupStatus(string status, DateTime? successAt) { database.UpdateBackupStatus(status, successAt); backupStatus.Text = "حالة النسخ: " + status; }
         private static void PruneBackups(string folder) { foreach (FileInfo f in new DirectoryInfo(folder).GetFiles("*.zip").OrderByDescending(x => x.CreationTimeUtc).Skip(30)) f.Delete(); }
         private void OnClosing(object sender, FormClosingEventArgs e)
         {
             if (!forceExit && e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; locked = true; Hide(); notify.BalloonTipTitle = "البرنامج يعمل في الخلفية"; notify.BalloonTipText = "ستستمر تنبيهات المواعيد والمهام. استخدم أيقونة البرنامج بجانب الساعة للفتح أو الإنهاء."; notify.ShowBalloonTip(7000); return; }
-            reminderTimer.Stop(); maintenanceTimer.Stop(); idleTimer.Stop(); try { RunScheduledBackup(true); } catch { } Application.RemoveMessageFilter(activity); notify.Visible = false; notify.Dispose();
+            reminderTimer.Stop(); maintenanceTimer.Stop(); idleTimer.Stop(); try { RunScheduledBackup(true); } catch { } AppDatabase.CleanupTemporaryAttachments(); Application.RemoveMessageFilter(activity); notify.Visible = false; notify.Dispose();
         }
 
         private sealed class InactivityFilter : IMessageFilter

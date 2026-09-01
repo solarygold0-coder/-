@@ -14,4 +14,5 @@ if ($LASTEXITCODE -ne 0) { throw "Safety tests failed." }
 $out = Join-Path $root "release\App"
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 Copy-Item (Join-Path $root "PatientRecordsSaudi\bin\Release\*") $out -Recurse -Force
+Get-ChildItem $out -Filter *.pdb -Recurse | Remove-Item -Force
 Write-Host "Build succeeded: $out"

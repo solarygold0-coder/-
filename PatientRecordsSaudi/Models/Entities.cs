@@ -109,6 +109,7 @@ namespace PatientRecordsSaudi.Models
         public int WorkDayStartMinutes { get; set; }
         public int WorkDayEndMinutes { get; set; }
         public int BackupIntervalHours { get; set; }
+        public string AutoBackupDirectory { get; set; }
         public DateTime? LastAutoBackupAt { get; set; }
         public string LastBackupStatus { get; set; }
         public List<string> VisitTypes { get; set; }

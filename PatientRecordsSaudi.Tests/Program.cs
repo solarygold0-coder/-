@@ -16,7 +16,7 @@ namespace PatientRecordsSaudi.Tests
             try
             {
                 string error;
-                string id1 = ValidNationalId(1), id2 = ValidNationalId(2), id3 = ValidNationalId(3);
+                string id1 = ValidNationalId(1), id2 = ValidNationalId(2), id3 = ValidNationalId(3), id4 = ValidNationalId(4);
                 Assert(SaudiValidation.ValidateSaudiIdentity(ToArabicDigits(id1), "هوية وطنية", out error), "Arabic digit ID validation");
                 string invalidId = id1.Substring(0, 9) + ((id1[9] - '0' + 1) % 10).ToString();
                 Assert(!SaudiValidation.ValidateSaudiIdentity(invalidId, "هوية وطنية", out error), "ID check digit rejection");
@@ -32,33 +32,48 @@ namespace PatientRecordsSaudi.Tests
                 Assert(employee.DisplayName == "موظف الاختبار" && !employee.IsAdmin, "Per-user login and role");
                 string lockPassword = "L!7" + Guid.NewGuid().ToString("N"), wrongPassword = "W!9" + Guid.NewGuid().ToString("N"); security.AddUser(admin, "locktest", "اختبار القفل", "موظف", lockPassword); for (int i = 0; i < 5; i++) try { security.Login("locktest", wrongPassword); } catch (UnauthorizedAccessException) { }
                 bool lockedOut = false; try { security.Login("locktest", lockPassword); } catch (UnauthorizedAccessException) { lockedOut = true; } Assert(lockedOut, "Temporary lockout after repeated failures");
+                Assert(!File.Exists(Path.Combine(temp, "auth.dat.bak")), "Obsolete authentication backup is not retained");
 
                 using (var db = new AppDatabase(temp, admin.DatabasePassword, admin.DisplayName))
                 {
+                    security.FlushPendingAudit(db); Assert(db.GetAllAudit().Exists(x => x.EntityType == "Security"), "Security events are imported into audit log");
                     Patient one = db.AddPatient(NewPatient(id1, "مراجع الاختبار الأول", TestMobile(1)));
                     Patient two = db.AddPatient(NewPatient(id2, "مراجع الاختبار الثاني", TestMobile(2)));
                     Assert(one.FileNumber == 1 && two.FileNumber == 2, "Sequential file numbering starts at 1");
                     AppSettings settings = db.GetSettings(); Assert(settings.VisitTypes.Count > 0 && settings.AppointmentStatuses.Contains("حضر"), "Default configurable lookups"); settings.VisitTypes.Add("زيارة اختبار"); db.SaveSettings(settings); Assert(db.GetSettings().VisitTypes.Contains("زيارة اختبار"), "Lookup customization persisted");
                     string attachmentSource = Path.Combine(temp, "test.pdf"); File.WriteAllText(attachmentSource, "%PDF-1.4 test attachment"); PatientAttachment attachment = db.AddAttachment(two.Id, attachmentSource, "نتيجة");
                     Assert(db.GetAttachments(two.Id, false).Count == 1 && attachment.SizeBytes > 0, "Encrypted attachment stored in database"); string attachmentCopy = db.ExportAttachmentToTemporaryFile(attachment.Id); Assert(File.ReadAllText(attachmentCopy) == "%PDF-1.4 test attachment", "Attachment integrity verified on open"); db.DeleteAttachment(attachment.Id); Assert(db.GetAttachments(two.Id, false).Count == 0, "Attachment soft delete"); db.RestoreAttachment(attachment.Id); Assert(db.GetAttachments(two.Id, false).Count == 1, "Attachment restore");
+                    string fakeImage = Path.Combine(temp, "fake.jpg"); File.WriteAllText(fakeImage, "not a jpeg"); bool fakeBlocked = false; try { db.AddAttachment(two.Id, fakeImage, "أخرى"); } catch (InvalidDataException) { fakeBlocked = true; } Assert(fakeBlocked, "Attachment content must match extension");
                     db.ArchivePatient(one.Id, "اختبار");
+                    Patient archived = db.GetPatient(one.Id); archived.City = "مدينة معدلة"; bool archivedEditBlocked = false; try { db.UpdatePatient(archived); } catch (InvalidOperationException) { archivedEditBlocked = true; } Assert(archivedEditBlocked, "Archived patient cannot be edited before restore");
                     Patient three = db.AddPatient(NewPatient(id3, "مراجع الاختبار الثالث", TestMobile(3)));
                     Assert(three.FileNumber == 3, "Deleted/archived number is not reused");
                     bool duplicateBlocked = false;
                     try { db.AddPatient(NewPatient(id2, "اسم آخر", TestMobile(4))); } catch (InvalidOperationException) { duplicateBlocked = true; }
                     Assert(duplicateBlocked, "Duplicate national ID blocked");
 
-                    DateTime sunday = new DateTime(2026, 9, 6, 9, 0, 0);
+                    int daysToSunday = ((int)DayOfWeek.Sunday - (int)DateTime.Today.DayOfWeek + 7) % 7; if (daysToSunday == 0) daysToSunday = 7; DateTime sunday = DateTime.Today.AddDays(daysToSunday).AddHours(9);
                     Appointment saved = db.AddAppointment(new Appointment { PatientId = two.Id, FileNumber = two.FileNumber, PatientName = two.FullName, Title = "مراجعة", VisitType = "مراجعة", StartsAt = sunday, DurationMinutes = 30, Status = "مؤكد" });
                     bool conflictBlocked = false;
                     try { db.AddAppointment(new Appointment { PatientId = three.Id, FileNumber = three.FileNumber, PatientName = three.FullName, Title = "متعارض", VisitType = "مراجعة", StartsAt = sunday.AddMinutes(15), DurationMinutes = 30, Status = "مؤكد" }); } catch (AppointmentConflictException) { conflictBlocked = true; }
                     Assert(conflictBlocked, "Overlapping appointment blocked");
-                    db.DeleteAppointment(saved.Id); Assert(db.GetDeletedAppointments().Count == 1 && db.GetAppointments(null, null).Count == 0, "Appointment soft delete");
-                    db.RestoreAppointment(saved.Id); Assert(db.GetAppointments(null, null).Count == 1, "Appointment restore");
+                    Appointment cancelled = db.AddAppointment(new Appointment { PatientId = three.Id, FileNumber = three.FileNumber, PatientName = three.FullName, Title = "ملغي", VisitType = "مراجعة", StartsAt = sunday.AddMinutes(15), DurationMinutes = 30, Status = "ملغي" }); Assert(cancelled != null, "Cancelled appointment does not reserve the slot");
+                    db.DeleteAppointment(saved.Id); Assert(db.GetDeletedAppointments().Count == 1 && db.GetAppointments(null, null).Count == 1, "Appointment soft delete");
+                    db.RestoreAppointment(saved.Id); Assert(db.GetAppointments(null, null).Count == 2, "Appointment restore");
                     db.ArchivePatient(two.Id, "اختبار", true); Assert(db.GetAppointment(saved.Id).Status == "ملغي", "Archiving closes future appointments");
-                    db.AddClosure(new DateTime(2026, 9, 7), "إجازة اختبار"); bool closureBlocked = false;
-                    try { db.AddAppointment(new Appointment { PatientId = three.Id, FileNumber = three.FileNumber, PatientName = three.FullName, Title = "إجازة", VisitType = "مراجعة", StartsAt = new DateTime(2026, 9, 7, 9, 0, 0), DurationMinutes = 30, Status = "مؤكد" }); } catch (InvalidOperationException) { closureBlocked = true; }
+                    DateTime monday = sunday.AddDays(1); db.AddClosure(monday, "إجازة اختبار"); bool closureBlocked = false;
+                    try { db.AddAppointment(new Appointment { PatientId = three.Id, FileNumber = three.FileNumber, PatientName = three.FullName, Title = "إجازة", VisitType = "مراجعة", StartsAt = monday, DurationMinutes = 30, Status = "مؤكد" }); } catch (InvalidOperationException) { closureBlocked = true; }
                     Assert(closureBlocked, "Configured closure date blocks appointments");
+                    db.DeleteAttachment(attachment.Id); Assert(db.PurgeDeletedAttachments(DateTime.Now.AddDays(1)) == 1 && db.GetAttachments(two.Id, true).Count == 0, "Old deleted attachments can be permanently purged by admin");
+                }
+                AppDatabase.CleanupTemporaryAttachments(); Assert(!Directory.Exists(Path.Combine(Path.GetTempPath(), "SaudiPatientRecordsView")), "Decrypted temporary attachments are removed");
+                using (var readOnlyDb = new AppDatabase(temp, admin.DatabasePassword, employee.DisplayName, "قراءة فقط"))
+                {
+                    bool writeBlocked = false; try { readOnlyDb.AddPatient(NewPatient(id4, "مراجع للقراءة فقط", TestMobile(4))); } catch (UnauthorizedAccessException) { writeBlocked = true; } Assert(writeBlocked, "Read-only role is enforced in data layer");
+                }
+                using (var staffDb = new AppDatabase(temp, admin.DatabasePassword, employee.DisplayName, "موظف"))
+                {
+                    bool settingsBlocked = false; try { staffDb.SaveSettings(staffDb.GetSettings()); } catch (UnauthorizedAccessException) { settingsBlocked = true; } Assert(settingsBlocked, "Admin-only settings are enforced in data layer");
                 }
                 RunTenThousandCapacityTest(temp);
                 Console.WriteLine("All checks passed."); return 0;
