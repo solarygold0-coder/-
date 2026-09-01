@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using LiteDB;
 using PatientRecordsSaudi.Models;
 using PatientRecordsSaudi.Services;
 
@@ -53,6 +55,7 @@ namespace PatientRecordsSaudi.Tests
                     try { db.AddAppointment(new Appointment { PatientId = three.Id, FileNumber = three.FileNumber, PatientName = three.FullName, Title = "إجازة", VisitType = "مراجعة", StartsAt = new DateTime(2026, 9, 7, 9, 0, 0), DurationMinutes = 30, Status = "مؤكد" }); } catch (InvalidOperationException) { closureBlocked = true; }
                     Assert(closureBlocked, "Configured closure date blocks appointments");
                 }
+                RunTenThousandCapacityTest(temp);
                 Console.WriteLine("All checks passed."); return 0;
             }
             catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
@@ -70,6 +73,28 @@ namespace PatientRecordsSaudi.Tests
             string firstNine = "1" + seed.ToString("D8"); int sum = 0;
             for (int i = 0; i < 9; i++) { int digit = firstNine[i] - '0'; if (i % 2 == 0) { int doubled = digit * 2; sum += doubled / 10 + doubled % 10; } else sum += digit; }
             return firstNine + ((10 - sum % 10) % 10).ToString();
+        }
+        private static void RunTenThousandCapacityTest(string root)
+        {
+            string folder = Path.Combine(root, "capacity"); Directory.CreateDirectory(folder); string password = "Capacity-" + Guid.NewGuid().ToString("N");
+            string path = Path.Combine(folder, "patients.db");
+            using (var lite = new LiteDatabase(new ConnectionString { Filename = path, Password = password, Connection = ConnectionType.Direct }))
+            {
+                var patients = lite.GetCollection<Patient>("patients"); var batch = new List<Patient>(1000);
+                for (int i = 1; i <= 10000; i++)
+                {
+                    batch.Add(new Patient { Id = Guid.NewGuid(), FileNumber = i, NationalId = "T" + i.ToString("D9"), FullName = "مراجع سعة " + i, NormalizedName = "مراجع سعه " + i, Mobile = "M" + i.ToString("D9"), City = "اختبار", CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now });
+                    if (batch.Count == 1000) { patients.InsertBulk(batch); batch.Clear(); }
+                }
+                lite.GetCollection<AppSettings>("settings").Insert(new AppSettings { Id = 1, NextFileNumber = 10001, ClinicName = "اختبار السعة", DefaultAppointmentMinutes = 30, WorkDayStartMinutes = 480, WorkDayEndMinutes = 1020, BackupIntervalHours = 4, UpdatedAt = DateTime.Now });
+                lite.Checkpoint();
+            }
+            using (var database = new AppDatabase(folder, password, "اختبار السعة"))
+            {
+                Assert(database.CountAllPatients() == 10000, "10,000 records stored and reopened");
+                Assert(database.FindByFileNumber(10000, false) != null, "Indexed lookup at record 10,000");
+                Assert(database.SearchPatients("الاسم", "مراجع سعة 9999", false, "رقم الملف").Count == 1, "Arabic name search across 10,000 records");
+            }
         }
         private static void Assert(bool condition, string name) { if (!condition) throw new Exception("FAILED: " + name); Console.WriteLine("PASS: " + name); }
     }
