@@ -38,6 +38,7 @@
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />
     <Reference Include="System.Security" />
+    <Reference Include="System.Web.Extensions" />
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
@@ -49,6 +50,9 @@
     <Compile Include="Services\BackupService.cs" />
     <Compile Include="UI\UiKit.cs" />
     <Compile Include="UI\LoginForm.cs" />
+    <Compile Include="UI\UserManagementForm.cs" />
+    <Compile Include="UI\ClosureDatesForm.cs" />
+    <Compile Include="UI\RecycleBinForm.cs" />
     <Compile Include="UI\DateTimeScrollControl.cs" />
     <Compile Include="UI\PatientForm.cs" />
     <Compile Include="UI\AppointmentForm.cs" />

@@ -19,7 +19,7 @@ namespace PatientRecordsSaudi.UI
         private readonly DateTimeScrollControl birthDate = new DateTimeScrollControl(false);
         public Patient Result { get; private set; }
 
-        public PatientForm(Patient patient)
+        public PatientForm(Patient patient, bool readOnly)
         {
             original = patient;
             Text = patient == null ? "إضافة مراجع جديد" : "ملف المراجع رقم " + patient.FileNumber;
@@ -37,7 +37,10 @@ namespace PatientRecordsSaudi.UI
             buttons.Controls.Add(UiKit.Button("إلغاء", delegate { DialogResult = DialogResult.Cancel; Close(); }, true));
             Controls.Add(buttons);
             ConfigureInputs(); if (patient != null) LoadPatient(patient); else { nationality.Text = "سعودي"; birthDate.Value = DateTime.Today.AddYears(-30); }
+            if (readOnly) { foreach (Control c in AllControls(this)) if (c is TextBox || c is ComboBox || c is DateTimeScrollControl) c.Enabled = false; buttons.Controls[0].Visible = false; Text += " — قراءة فقط"; }
         }
+
+        private static System.Collections.Generic.IEnumerable<Control> AllControls(Control root) { foreach (Control c in root.Controls) { yield return c; foreach (Control child in AllControls(c)) yield return child; } }
 
         private TabPage BuildPersonalTab()
         {
