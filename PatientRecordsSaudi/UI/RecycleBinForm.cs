@@ -13,7 +13,7 @@ namespace PatientRecordsSaudi.UI
         public RecycleBinForm(AppDatabase database)
         {
             this.database = database; Text = "المحذوفات القابلة للاستعادة"; RightToLeft = RightToLeft.Yes; RightToLeftLayout = true; StartPosition = FormStartPosition.CenterParent; Size = new Size(900, 600); Font = UiKit.NormalFont; BackColor = UiKit.Background;
-            var tabs = new TabControl { Dock = DockStyle.Fill }; var a = new TabPage("المواعيد المحذوفة"), t = new TabPage("المهام المحذوفة"); ConfigureAppointmentGrid(); ConfigureTaskGrid(); a.Controls.Add(appointments); t.Controls.Add(tasks); tabs.TabPages.Add(a); tabs.TabPages.Add(t); Controls.Add(tabs);
+            var tabs = new TabControl { Dock = DockStyle.Fill }; TabPage a = new TabPage("المواعيد المحذوفة"), t = new TabPage("المهام المحذوفة"); ConfigureAppointmentGrid(); ConfigureTaskGrid(); a.Controls.Add(appointments); t.Controls.Add(tasks); tabs.TabPages.Add(a); tabs.TabPages.Add(t); Controls.Add(tabs);
             var bottom = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 58, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(6) }; bottom.Controls.Add(UiKit.Button("استعادة المحدد", delegate { Restore(tabs.SelectedIndex); }, false)); Controls.Add(bottom); LoadData();
         }
         private void ConfigureAppointmentGrid() { UiKit.AddTextColumn(appointments, "FileNumber", "رقم الملف", 15); UiKit.AddTextColumn(appointments, "PatientName", "المراجع", 30); UiKit.AddTextColumn(appointments, "Title", "الموعد", 30); UiKit.AddTextColumn(appointments, "DeletedAt", "تاريخ الحذف", 25); }
