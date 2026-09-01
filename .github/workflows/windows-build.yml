@@ -9,7 +9,7 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Restore and build
         shell: powershell
         run: .\build-windows.ps1
@@ -22,9 +22,17 @@ jobs:
       - name: Build installer
         shell: powershell
         run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" .\Installer.iss'
+      - name: Mark CI package as unsigned
+        shell: powershell
+        run: |
+          @(
+            "UNSIGNED TEST BUILD - NOT FOR DISTRIBUTION"
+            "Use the Signed Windows Release workflow for public releases."
+          ) | Out-File -FilePath .\release\UNSIGNED_BUILD.txt -Encoding utf8
       - uses: actions/upload-artifact@v4
         with:
-          name: Saudi-Patient-Records-Windows
+          name: Saudi-Patient-Records-Windows-UNSIGNED-CI
           path: |
             release/تثبيت_نظام_سجلات_المراجعين.exe
             release/App/**
+            release/UNSIGNED_BUILD.txt

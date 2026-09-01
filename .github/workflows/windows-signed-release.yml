@@ -1,0 +1,98 @@
+name: Signed Windows Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  signed-release:
+    runs-on: windows-2022
+    env:
+      ESIGNER_INSTALL_DIR: C:\Users\runneradmin\eSignerCKA
+      ESIGNER_MASTER_KEY: C:\Users\runneradmin\eSignerCKA\master.key
+      EXPECTED_PUBLISHER: Mohammed Mousa Asiri
+      SSL_COM_USERNAME: ${{ secrets.SSL_COM_USERNAME }}
+      SSL_COM_PASSWORD: ${{ secrets.SSL_COM_PASSWORD }}
+      SSL_COM_TOTP_SECRET: ${{ secrets.SSL_COM_TOTP_SECRET }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Validate signing secrets
+        shell: powershell
+        run: |
+          foreach ($name in @("SSL_COM_USERNAME", "SSL_COM_PASSWORD", "SSL_COM_TOTP_SECRET")) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              throw "Required GitHub secret '$name' is missing."
+            }
+          }
+
+      - name: Build and test
+        shell: powershell
+        run: .\build-windows.ps1
+
+      - name: Ensure Inno Setup
+        shell: powershell
+        run: |
+          if (-not (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --no-progress -y
+          }
+
+      - name: Install eSigner Cloud Key Adapter
+        shell: powershell
+        run: |
+          Invoke-WebRequest -OutFile eSigner_CKA_Setup.zip "https://github.com/SSLcom/eSignerCKA/releases/download/v1.0.8/SSL.COM-eSigner-CKA_1.0.8.zip"
+          Expand-Archive -Force eSigner_CKA_Setup.zip
+          Move-Item -Destination "eSigner_CKA_Installer.exe" -Path "eSigner_CKA_*\*.exe"
+          New-Item -ItemType Directory -Force -Path $env:ESIGNER_INSTALL_DIR | Out-Null
+          Start-Process ".\eSigner_CKA_Installer.exe" -ArgumentList "/CURRENTUSER /VERYSILENT /SUPPRESSMSGBOXES /DIR=`"$env:ESIGNER_INSTALL_DIR`"" -Wait
+          Start-Process ".\setup\vc_redist.x86.exe" -ArgumentList "/install /q" -Wait
+          Start-Process ".\setup\vc_redist.x64.exe" -ArgumentList "/install /q" -Wait
+          & "$env:ESIGNER_INSTALL_DIR\RegisterKSP.exe" | Out-Null
+          & "$env:ESIGNER_INSTALL_DIR\eSignerCSP.Config.exe" | Out-Null
+
+      - name: Load verified publisher certificate
+        shell: powershell
+        run: |
+          & "$env:ESIGNER_INSTALL_DIR\eSignerCKATool.exe" config -mode "product" -user $env:SSL_COM_USERNAME -pass $env:SSL_COM_PASSWORD -totp $env:SSL_COM_TOTP_SECRET -key $env:ESIGNER_MASTER_KEY -r
+          & "$env:ESIGNER_INSTALL_DIR\eSignerCKATool.exe" unload
+          & "$env:ESIGNER_INSTALL_DIR\eSignerCKATool.exe" load
+
+      - name: Sign and verify application files
+        shell: powershell
+        run: .\sign-windows-artifacts.ps1 -Path .\release\App -Publisher $env:EXPECTED_PUBLISHER
+
+      - name: Build installer from signed files
+        shell: powershell
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" .\Installer.iss'
+
+      - name: Sign and verify installer
+        shell: powershell
+        run: .\sign-windows-artifacts.ps1 -Path .\release\تثبيت_نظام_سجلات_المراجعين.exe -Publisher $env:EXPECTED_PUBLISHER
+
+      - name: Create signature report and SHA-256 fingerprints
+        shell: powershell
+        run: .\new-release-integrity.ps1 -ReleaseDirectory .\release -Publisher $env:EXPECTED_PUBLISHER
+
+      - name: Upload signed release
+        uses: actions/upload-artifact@v4
+        with:
+          name: Saudi-Patient-Records-Windows-SIGNED-v1.3.1
+          if-no-files-found: error
+          path: |
+            release/تثبيت_نظام_سجلات_المراجعين.exe
+            release/App/**
+            release/SHA256SUMS.txt
+            release/SIGNATURE_REPORT.txt
+
+      - name: Remove signing session
+        if: always()
+        shell: powershell
+        run: |
+          if (Test-Path "$env:ESIGNER_INSTALL_DIR\eSignerCKATool.exe") {
+            & "$env:ESIGNER_INSTALL_DIR\eSignerCKATool.exe" unload
+          }
+          Remove-Item $env:ESIGNER_MASTER_KEY -Force -ErrorAction SilentlyContinue

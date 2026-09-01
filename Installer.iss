@@ -1,11 +1,13 @@
 #define MyAppName "نظام إدارة سجلات المراجعين"
-#define MyAppVersion "1.3.0"
+#define MyAppVersion "1.3.1"
 #define MyAppExeName "سجلات_المراجعين.exe"
+#define MyAppPublisher "Mohammed Mousa Asiri"
 
 [Setup]
 AppId={{A7904157-8218-4708-9191-D6C477B3940C}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\Saudi Patient Records
 DefaultGroupName={#MyAppName}
 OutputDir=release
@@ -16,6 +18,12 @@ PrivilegesRequired=admin
 UninstallDisplayIcon={app}\{#MyAppExeName}
 WizardStyle=modern
 MinVersion=6.1sp1
+VersionInfoVersion={#MyAppVersion}.0
+VersionInfoCompany={#MyAppPublisher}
+VersionInfoDescription={#MyAppName}
+VersionInfoCopyright=Copyright (C) 2026 {#MyAppPublisher}
+VersionInfoProductName={#MyAppName}
+VersionInfoProductVersion={#MyAppVersion}
 
 [Languages]
 Name: "arabic"; MessagesFile: "compiler:Languages\Arabic.isl"
