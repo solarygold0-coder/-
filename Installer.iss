@@ -1,27 +1,39 @@
 #define MyAppName "نظام إدارة سجلات المراجعين"
-#define MyAppVersion "1.1.0"
-#define MyAppExeName "سجلات_المرضى.exe"
+#define MyAppVersion "1.3.1"
+#define MyAppExeName "سجلات_المراجعين.exe"
+#define MyAppPublisher "Mohammed Mousa Asiri"
 
 [Setup]
 AppId={{A7904157-8218-4708-9191-D6C477B3940C}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\Saudi Patient Records
 DefaultGroupName={#MyAppName}
 OutputDir=release
-OutputBaseFilename=تثبيت_نظام_سجلات_المرضى
+OutputBaseFilename=تثبيت_نظام_سجلات_المراجعين
 Compression=lzma2
 SolidCompression=yes
 PrivilegesRequired=admin
 UninstallDisplayIcon={app}\{#MyAppExeName}
 WizardStyle=modern
 MinVersion=6.1sp1
+VersionInfoVersion={#MyAppVersion}.0
+VersionInfoCompany={#MyAppPublisher}
+VersionInfoDescription={#MyAppName}
+VersionInfoCopyright=Copyright (C) 2026 {#MyAppPublisher}
+VersionInfoProductName={#MyAppName}
+VersionInfoProductVersion={#MyAppVersion}
 
 [Languages]
 Name: "arabic"; MessagesFile: "compiler:Languages\Arabic.isl"
 
 [Files]
-Source: "release\App\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "release\App\*"; DestDir: "{app}"; Excludes: "*.pdb"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[InstallDelete]
+Type: files; Name: "{app}\سجلات_المرضى.exe"
+Type: files; Name: "{app}\سجلات_المراجعين.pdb"
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
