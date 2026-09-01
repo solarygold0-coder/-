@@ -20,6 +20,15 @@ namespace PatientRecordsSaudi.Services
             return result.ToString();
         }
 
+        public static string NormalizeArabicName(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+            string v = value.Trim().ToLowerInvariant().Normalize(NormalizationForm.FormC);
+            v = Regex.Replace(v, "[أإآٱ]", "ا").Replace('ى', 'ي').Replace('ة', 'ه').Replace('ؤ', 'و').Replace('ئ', 'ي');
+            v = Regex.Replace(v, "[\\u064B-\\u065F\\u0670]", "");
+            return Regex.Replace(v, "\\s+", " ");
+        }
+
         public static bool DigitsOnly(string value)
         {
             string v = NormalizeDigits(value);

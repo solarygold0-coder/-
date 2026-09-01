@@ -27,7 +27,7 @@ namespace PatientRecordsSaudi.UI
             notes.Multiline = true; notes.Height = 80; notes.ScrollBars = ScrollBars.Vertical; Add(table, "ملاحظات", notes); Controls.Add(table);
             patientName.ReadOnly = nationalId.ReadOnly = mobile.ReadOnly = true; patientName.BackColor = nationalId.BackColor = mobile.BackColor = Color.FromArgb(235, 238, 240);
             fileNumber.KeyPress += delegate(object s, KeyPressEventArgs e) { if (!char.IsControl(e.KeyChar) && !char.IsDigit(e.KeyChar)) e.Handled = true; };
-            fileNumber.Leave += delegate { ResolvePatient(true); }; duration.SelectedItem = database.GetSettings().DefaultAppointmentMinutes.ToString();
+            fileNumber.Leave += delegate { ResolvePatient(true); }; int defaultMinutes = database.GetSettings().DefaultAppointmentMinutes; duration.SelectedItem = defaultMinutes.ToString(); if (appointment == null) dateTime.Value = database.GetNextAvailableAppointmentTime(defaultMinutes);
             var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 58, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(10) };
             buttons.Controls.Add(UiKit.Button("حفظ الموعد", Save, false)); buttons.Controls.Add(UiKit.Button("إلغاء", delegate { DialogResult = DialogResult.Cancel; Close(); }, true)); Controls.Add(buttons);
             if (appointment != null) LoadAppointment(appointment); else if (initialFileNumber.HasValue) { fileNumber.Text = initialFileNumber.Value.ToString(); ResolvePatient(false); }

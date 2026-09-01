@@ -19,13 +19,13 @@ namespace PatientRecordsSaudi
             Directory.CreateDirectory(DataDirectory);
 
             var security = new AppSecurity(DataDirectory);
-            using (var login = new LoginForm(security))
+            using (var login = new LoginForm(security, null))
             {
                 if (login.ShowDialog() != DialogResult.OK) return;
                 try
                 {
-                    using (var database = new AppDatabase(DataDirectory, security.DatabasePassword(login.Password)))
-                        Application.Run(new MainForm(database, new BackupService(DataDirectory)));
+                    using (var database = new AppDatabase(DataDirectory, login.Session.DatabasePassword, login.Session.DisplayName))
+                        Application.Run(new MainForm(database, new BackupService(DataDirectory), security, login.Session));
                 }
                 catch (Exception ex)
                 {

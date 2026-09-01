@@ -1,5 +1,5 @@
-#define MyAppName "نظام إدارة سجلات المرضى"
-#define MyAppVersion "1.0.0"
+#define MyAppName "نظام إدارة سجلات المراجعين"
+#define MyAppVersion "1.1.0"
 #define MyAppExeName "سجلات_المرضى.exe"
 
 [Setup]
@@ -32,3 +32,13 @@ Name: "desktopicon"; Description: "إنشاء اختصار على سطح الم�
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "تشغيل {#MyAppName}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+function InitializeSetup(): Boolean;
+var
+  Release: Cardinal;
+begin
+  Result := RegQueryDWordValue(HKLM, 'SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full', 'Release', Release) and (Release >= 461808);
+  if not Result then
+    MsgBox('يتطلب البرنامج Microsoft .NET Framework 4.7.2 أو 4.8. ثبّته أولاً ثم أعد تشغيل المثبّت.', mbError, MB_OK);
+end;

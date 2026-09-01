@@ -16,5 +16,6 @@
   </ItemGroup>
   <ItemGroup><Compile Include="Program.cs" /></ItemGroup>
   <ItemGroup><ProjectReference Include="..\PatientRecordsSaudi\PatientRecordsSaudi.csproj"><Project>{D7F9D8F4-5209-4BF0-AB7B-1C7B4F2289ED}</Project><Name>PatientRecordsSaudi</Name></ProjectReference></ItemGroup>
+  <ItemGroup><PackageReference Include="LiteDB" Version="5.0.21" /></ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

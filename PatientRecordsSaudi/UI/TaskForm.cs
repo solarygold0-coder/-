@@ -36,6 +36,7 @@ namespace PatientRecordsSaudi.UI
         private void Save(object sender, EventArgs e)
         {
             if (!Resolve(true)) return; if (string.IsNullOrWhiteSpace(title.Text)) { UiKit.ShowError("أدخل اسم المهمة أو التنبيه."); title.Focus(); return; }
+            if (original == null && due.Value < DateTime.Now.AddMinutes(-1)) { UiKit.ShowError("لا يمكن إنشاء مهمة جديدة بوقت سابق."); return; }
             Result = original ?? new PatientTask(); Result.PatientId = patient.Id; Result.FileNumber = patient.FileNumber; Result.PatientName = patient.FullName; Result.Title = title.Text.Trim(); Result.DueAt = due.Value; Result.Priority = priority.Text; Result.IsCompleted = completed.SelectedIndex == 1; Result.Notes = notes.Text.Trim();
             DialogResult = DialogResult.OK; Close();
         }
