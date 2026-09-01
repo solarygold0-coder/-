@@ -17,6 +17,7 @@ namespace PatientRecordsSaudi
             Application.SetCompatibleTextRenderingDefault(false);
             DataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SaudiPatientRecords");
             Directory.CreateDirectory(DataDirectory);
+            AppDatabase.CleanupTemporaryAttachments();
 
             var security = new AppSecurity(DataDirectory);
             using (var login = new LoginForm(security, null))

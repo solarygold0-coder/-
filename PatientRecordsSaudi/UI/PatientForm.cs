@@ -1,5 +1,8 @@
 using System;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 using PatientRecordsSaudi.Models;
@@ -9,19 +12,20 @@ namespace PatientRecordsSaudi.UI
 {
     public sealed class PatientForm : Form
     {
-        private readonly Patient original;
+        private readonly Patient original; private readonly AppDatabase database; private readonly bool readOnly;
         private readonly ErrorProvider errors = new ErrorProvider();
         private readonly TextBox fileNo = UiKit.TextBox(12), nationalId = UiKit.TextBox(10), fullName = UiKit.TextBox(150), nationality = UiKit.TextBox(50);
         private readonly TextBox mobile = UiKit.TextBox(16), altPhone = UiKit.TextBox(16), city = UiKit.TextBox(50), address = UiKit.TextBox(250);
         private readonly TextBox emergencyName = UiKit.TextBox(100), emergencyPhone = UiKit.TextBox(16);
         private readonly TextBox allergies = UiKit.TextBox(1000), chronic = UiKit.TextBox(1000), notes = UiKit.TextBox(3000);
-        private readonly ComboBox identityType = UiKit.Combo("هوية وطنية", "إقامة"), gender = UiKit.Combo("ذكر", "أنثى"), blood = UiKit.Combo("غير محدد", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-");
+        private readonly ComboBox identityType = UiKit.Combo("هوية وطنية", "إقامة"), gender = UiKit.Combo(), blood = UiKit.Combo();
         private readonly DateTimeScrollControl birthDate = new DateTimeScrollControl(false);
+        private readonly DataGridView attachmentGrid = UiKit.Grid(); private readonly CheckBox showDeletedAttachments = new CheckBox { Text = "إظهار المحذوفة", AutoSize = true, Font = UiKit.NormalFont, Margin = new Padding(10, 12, 10, 5) };
         public Patient Result { get; private set; }
 
-        public PatientForm(Patient patient, bool readOnly)
+        public PatientForm(AppDatabase database, Patient patient, bool readOnly)
         {
-            original = patient;
+            this.database = database; original = patient; this.readOnly = readOnly;
             Text = patient == null ? "إضافة مراجع جديد" : "ملف المراجع رقم " + patient.FileNumber;
             RightToLeft = RightToLeft.Yes; RightToLeftLayout = true; Font = UiKit.NormalFont; BackColor = UiKit.Background;
             StartPosition = FormStartPosition.CenterParent; Size = new Size(900, 700); MinimumSize = new Size(760, 600);
@@ -30,7 +34,7 @@ namespace PatientRecordsSaudi.UI
             var header = new Label { Text = Text, Dock = DockStyle.Top, Height = 52, TextAlign = ContentAlignment.MiddleCenter, BackColor = UiKit.Primary, ForeColor = Color.White, Font = new Font("Tahoma", 14, FontStyle.Bold) };
             Controls.Add(header);
             var tabs = new TabControl { Dock = DockStyle.Fill, Font = UiKit.BoldFont };
-            tabs.TabPages.Add(BuildPersonalTab()); tabs.TabPages.Add(BuildContactTab()); tabs.TabPages.Add(BuildMedicalTab());
+            LoadLookupOptions(); tabs.TabPages.Add(BuildPersonalTab()); tabs.TabPages.Add(BuildContactTab()); tabs.TabPages.Add(BuildMedicalTab()); tabs.TabPages.Add(BuildAttachmentsTab());
             Controls.Add(tabs);
             var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 58, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(10) };
             buttons.Controls.Add(UiKit.Button("حفظ", Save, false));
@@ -38,6 +42,11 @@ namespace PatientRecordsSaudi.UI
             Controls.Add(buttons);
             ConfigureInputs(); if (patient != null) LoadPatient(patient); else { nationality.Text = "سعودي"; birthDate.Value = DateTime.Today.AddYears(-30); }
             if (readOnly) { foreach (Control c in AllControls(this)) if (c is TextBox || c is ComboBox || c is DateTimeScrollControl) c.Enabled = false; buttons.Controls[0].Visible = false; Text += " — قراءة فقط"; }
+        }
+
+        private void LoadLookupOptions()
+        {
+            AppSettings s = database.GetSettings(); gender.Items.AddRange(s.GenderOptions.ToArray()); blood.Items.AddRange(s.BloodTypes.ToArray()); if (gender.Items.Count > 0) gender.SelectedIndex = 0; if (blood.Items.Count > 0) blood.SelectedIndex = 0;
         }
 
         private static System.Collections.Generic.IEnumerable<Control> AllControls(Control root) { foreach (Control c in root.Controls) { yield return c; foreach (Control child in AllControls(c)) yield return child; } }
@@ -72,6 +81,47 @@ namespace PatientRecordsSaudi.UI
             AddWideRow(table, "ملاحظات طبية وإدارية", notes);
             tab.Controls.Add(table); return tab;
         }
+        private TabPage BuildAttachmentsTab()
+        {
+            var tab = new TabPage("المرفقات المشفرة") { BackColor = Color.White, Padding = new Padding(10) };
+            var tools = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 55, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, AutoScroll = true };
+            Button add = UiKit.Button("إضافة ملف", AddAttachment, false), open = UiKit.Button("فتح", OpenAttachment, false), delete = UiKit.Button("نقل للمحذوفات", DeleteAttachment, true), restore = UiKit.Button("استعادة", RestoreAttachment, false);
+            add.Enabled = delete.Enabled = restore.Enabled = !readOnly && original != null && !original.IsArchived; open.Enabled = original != null; tools.Controls.Add(add); tools.Controls.Add(open); tools.Controls.Add(delete); tools.Controls.Add(restore); tools.Controls.Add(showDeletedAttachments);
+            tools.Controls.Add(new Label { Text = original == null ? "احفظ ملف المراجع أولًا ثم أضف المرفقات." : "PDF / JPG / PNG / DOCX — حتى 10 م.ب — محفوظ داخل قاعدة البيانات المشفرة", AutoSize = true, ForeColor = Color.DimGray, Font = UiKit.NormalFont, Margin = new Padding(12, 12, 8, 4) });
+            UiKit.AddTextColumn(attachmentGrid, "OriginalName", "اسم الملف", 32); UiKit.AddTextColumn(attachmentGrid, "Category", "التصنيف", 16); UiKit.AddTextColumn(attachmentGrid, "SizeText", "الحجم", 12); UiKit.AddTextColumn(attachmentGrid, "UploadedText", "تاريخ الرفع", 22); UiKit.AddTextColumn(attachmentGrid, "UploadedBy", "الموظف", 16); UiKit.AddTextColumn(attachmentGrid, "StatusText", "الحالة", 12);
+            attachmentGrid.CellDoubleClick += delegate { OpenAttachment(null, EventArgs.Empty); }; showDeletedAttachments.CheckedChanged += delegate { LoadAttachments(); };
+            tab.Controls.Add(tools); tab.Controls.Add(attachmentGrid); attachmentGrid.BringToFront(); LoadAttachments(); return tab;
+        }
+
+        private PatientAttachment SelectedAttachment() { return attachmentGrid.CurrentRow == null ? null : attachmentGrid.CurrentRow.DataBoundItem as PatientAttachment; }
+        private void LoadAttachments() { attachmentGrid.DataSource = new BindingList<PatientAttachment>(original == null ? new System.Collections.Generic.List<PatientAttachment>() : database.GetAttachments(original.Id, showDeletedAttachments.Checked)); }
+        private void AddAttachment(object sender, EventArgs e)
+        {
+            if (original == null) return; using (var open = new OpenFileDialog { Filter = "الملفات المسموحة|*.pdf;*.jpg;*.jpeg;*.png;*.docx", Multiselect = false, Title = "اختر مرفق المراجع" })
+            if (open.ShowDialog(this) == DialogResult.OK)
+            {
+                string category = PromptCategory(); if (category == null) return;
+                try { database.AddAttachment(original.Id, open.FileName, category); LoadAttachments(); } catch (Exception ex) { UiKit.ShowError(ex.Message); }
+            }
+        }
+        private string PromptCategory()
+        {
+            using (var form = new Form { Text = "تصنيف المرفق", RightToLeft = RightToLeft.Yes, RightToLeftLayout = true, StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, ClientSize = new Size(420, 150), MinimizeBox = false, MaximizeBox = false, Font = UiKit.NormalFont })
+            {
+                var combo = UiKit.Combo("هوية", "إحالة", "نتيجة", "خطاب", "أخرى"); combo.Dock = DockStyle.Top; combo.Margin = new Padding(16);
+                var label = new Label { Text = "اختر تصنيف المرفق:", Dock = DockStyle.Top, Height = 36, TextAlign = ContentAlignment.MiddleRight, Padding = new Padding(10) };
+                var ok = UiKit.Button("موافق", delegate { form.DialogResult = DialogResult.OK; form.Close(); }, false); ok.Dock = DockStyle.Bottom; form.Controls.Add(ok); form.Controls.Add(combo); form.Controls.Add(label); form.AcceptButton = ok;
+                return form.ShowDialog(this) == DialogResult.OK ? combo.Text : null;
+            }
+        }
+        private void OpenAttachment(object sender, EventArgs e)
+        {
+            PatientAttachment a = SelectedAttachment(); if (a == null) { UiKit.ShowError("اختر مرفقًا أولًا."); return; } if (a.IsDeleted) { UiKit.ShowError("استعد المرفق أولًا قبل فتحه."); return; }
+            try { string path = database.ExportAttachmentToTemporaryFile(a.Id); Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); }
+            catch (Exception ex) { UiKit.ShowError("تعذر فتح المرفق: " + ex.Message); }
+        }
+        private void DeleteAttachment(object sender, EventArgs e) { PatientAttachment a = SelectedAttachment(); if (a != null && !a.IsDeleted && UiKit.Confirm("نقل المرفق «" + a.OriginalName + "» إلى المحذوفات؟", "تأكيد")) { database.DeleteAttachment(a.Id); LoadAttachments(); } }
+        private void RestoreAttachment(object sender, EventArgs e) { PatientAttachment a = SelectedAttachment(); if (a != null && a.IsDeleted) { try { database.RestoreAttachment(a.Id); LoadAttachments(); } catch (Exception ex) { UiKit.ShowError(ex.Message); } } }
 
         private static TableLayoutPanel FormTable()
         {

@@ -6,7 +6,7 @@
     <ProjectGuid>{D7F9D8F4-5209-4BF0-AB7B-1C7B4F2289ED}</ProjectGuid>
     <OutputType>WinExe</OutputType>
     <RootNamespace>PatientRecordsSaudi</RootNamespace>
-    <AssemblyName>سجلات_المرضى</AssemblyName>
+    <AssemblyName>سجلات_المراجعين</AssemblyName>
     <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <LangVersion>7.3</LangVersion>
     <FileAlignment>512</FileAlignment>

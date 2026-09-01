@@ -1,6 +1,6 @@
 #define MyAppName "نظام إدارة سجلات المراجعين"
-#define MyAppVersion "1.1.0"
-#define MyAppExeName "سجلات_المرضى.exe"
+#define MyAppVersion "1.2.0"
+#define MyAppExeName "سجلات_المراجعين.exe"
 
 [Setup]
 AppId={{A7904157-8218-4708-9191-D6C477B3940C}
@@ -9,7 +9,7 @@ AppVersion={#MyAppVersion}
 DefaultDirName={autopf}\Saudi Patient Records
 DefaultGroupName={#MyAppName}
 OutputDir=release
-OutputBaseFilename=تثبيت_نظام_سجلات_المرضى
+OutputBaseFilename=تثبيت_نظام_سجلات_المراجعين
 Compression=lzma2
 SolidCompression=yes
 PrivilegesRequired=admin
@@ -22,6 +22,9 @@ Name: "arabic"; MessagesFile: "compiler:Languages\Arabic.isl"
 
 [Files]
 Source: "release\App\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[InstallDelete]
+Type: files; Name: "{app}\سجلات_المرضى.exe"
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

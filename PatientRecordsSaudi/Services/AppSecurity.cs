@@ -44,6 +44,8 @@ namespace PatientRecordsSaudi.Services
         public string WrappedKeyIv { get; set; }
         public string WrappedKeyCipher { get; set; }
         public string WrappedKeyMac { get; set; }
+        public int FailedLoginCount { get; set; }
+        public DateTime? LockoutUntilUtc { get; set; }
     }
 
     public sealed class AppSecurity
@@ -72,7 +74,15 @@ namespace PatientRecordsSaudi.Services
             SecurityStore store = LoadStore(); string key = NormalizeUsername(username);
             SecurityUserRecord user = store.Users.FirstOrDefault(x => x.Username == key);
             if (user == null || !user.IsActive) throw new UnauthorizedAccessException("اسم المستخدم أو كلمة المرور غير صحيحة.");
-            string dbPassword; if (!TryUnwrap(user, password, out dbPassword)) throw new UnauthorizedAccessException("اسم المستخدم أو كلمة المرور غير صحيحة.");
+            if (user.LockoutUntilUtc.HasValue && user.LockoutUntilUtc.Value > DateTime.UtcNow) throw new UnauthorizedAccessException("الحساب مقفل مؤقتًا بسبب محاولات دخول متكررة. حاول بعد " + user.LockoutUntilUtc.Value.ToLocalTime().ToString("HH:mm") + ".");
+            if (user.LockoutUntilUtc.HasValue) { user.LockoutUntilUtc = null; user.FailedLoginCount = 0; }
+            string dbPassword;
+            if (!TryUnwrap(user, password, out dbPassword))
+            {
+                user.FailedLoginCount++; if (user.FailedLoginCount >= 5) { user.LockoutUntilUtc = DateTime.UtcNow.AddMinutes(15); user.FailedLoginCount = 0; } SaveStore(store);
+                throw new UnauthorizedAccessException(user.LockoutUntilUtc.HasValue && user.LockoutUntilUtc.Value > DateTime.UtcNow ? "تم قفل الحساب لمدة 15 دقيقة بعد خمس محاولات غير صحيحة." : "اسم المستخدم أو كلمة المرور غير صحيحة.");
+            }
+            if (user.FailedLoginCount != 0 || user.LockoutUntilUtc.HasValue) { user.FailedLoginCount = 0; user.LockoutUntilUtc = null; SaveStore(store); }
             return Session(user, dbPassword);
         }
 
@@ -154,7 +164,11 @@ namespace PatientRecordsSaudi.Services
         private static SecuritySession Session(SecurityUserRecord u, string db) { return new SecuritySession { Username = u.Username, DisplayName = u.DisplayName, Role = u.Role, DatabasePassword = db }; }
         private static SecurityUserRecord FindUser(SecurityStore s, string name) { string key = NormalizeUsername(name); SecurityUserRecord u = s.Users.FirstOrDefault(x => x.Username == key); if (u == null) throw new InvalidOperationException("المستخدم غير موجود."); return u; }
         private static void RequireAdmin(SecuritySession s) { if (s == null || !s.IsAdmin) throw new UnauthorizedAccessException("هذه العملية متاحة للمدير فقط."); }
-        private static void ValidatePassword(string p) { if (string.IsNullOrWhiteSpace(p) || p.Length < 8) throw new ArgumentException("كلمة المرور يجب ألا تقل عن 8 خانات."); }
+        private static void ValidatePassword(string p)
+        {
+            if (string.IsNullOrWhiteSpace(p) || p.Length < 10) throw new ArgumentException("كلمة المرور يجب ألا تقل عن 10 خانات.");
+            if (!p.Any(char.IsLetter) || !p.Any(char.IsDigit) || !p.Any(c => !char.IsLetterOrDigit(c) && !char.IsWhiteSpace(c))) throw new ArgumentException("كلمة المرور يجب أن تتضمن حرفًا ورقمًا ورمزًا خاصًا على الأقل.");
+        }
         private static void ValidateRole(string r) { if (r != "مدير" && r != "موظف" && r != "قراءة فقط") throw new ArgumentException("الصلاحية غير صحيحة."); }
         private static string NormalizeUsername(string s) { return (s ?? "").Trim().ToLowerInvariant(); }
         private static string CleanDisplayName(string s) { string v = (s ?? "").Trim(); if (v.Length < 2) throw new ArgumentException("أدخل اسم الموظف بصورة صحيحة."); return v; }

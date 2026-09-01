@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
 using PatientRecordsSaudi.Models;
 using PatientRecordsSaudi.Services;
@@ -10,13 +11,14 @@ namespace PatientRecordsSaudi.UI
     {
         private readonly AppDatabase database; private readonly Appointment original; private Patient selectedPatient;
         private readonly TextBox fileNumber = UiKit.TextBox(12), patientName = UiKit.TextBox(150), nationalId = UiKit.TextBox(10), mobile = UiKit.TextBox(16), title = UiKit.TextBox(150), notes = UiKit.TextBox(1000);
-        private readonly ComboBox visitType = UiKit.Combo("مراجعة", "موعد جديد", "إجراء", "نتائج", "استشارة"), status = UiKit.Combo("مؤكد", "بانتظار التأكيد", "حضر", "لم يحضر", "ملغي"), duration = UiKit.Combo("15", "30", "45", "60", "90", "120");
+        private readonly ComboBox visitType = UiKit.Combo(), status = UiKit.Combo(), duration = UiKit.Combo("15", "30", "45", "60", "90", "120");
         private readonly DateTimeScrollControl dateTime = new DateTimeScrollControl(true);
         public Appointment Result { get; private set; }
 
         public AppointmentForm(AppDatabase database, Appointment appointment, long? initialFileNumber)
         {
             this.database = database; original = appointment;
+            AppSettings settings = database.GetSettings(); visitType.Items.AddRange(settings.VisitTypes.ToArray()); status.Items.AddRange(settings.AppointmentStatuses.ToArray()); if (visitType.Items.Count > 0) visitType.SelectedIndex = 0; if (status.Items.Count > 0) status.SelectedIndex = 0;
             Text = appointment == null ? "موعد جديد" : "تعديل الموعد"; RightToLeft = RightToLeft.Yes; RightToLeftLayout = true; Font = UiKit.NormalFont;
             StartPosition = FormStartPosition.CenterParent; Size = new Size(720, 620); MinimumSize = new Size(650, 560); BackColor = UiKit.Background;
             var head = new Label { Text = Text, Dock = DockStyle.Top, Height = 50, BackColor = UiKit.Primary, ForeColor = Color.White, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Tahoma", 14, FontStyle.Bold) }; Controls.Add(head);
@@ -56,6 +58,7 @@ namespace PatientRecordsSaudi.UI
         }
         private void LoadAppointment(Appointment a)
         {
+            if (!visitType.Items.Contains(a.VisitType)) visitType.Items.Add(a.VisitType); if (!status.Items.Contains(a.Status)) status.Items.Add(a.Status);
             fileNumber.Text = a.FileNumber.ToString(); ResolvePatient(false); title.Text = a.Title; visitType.SelectedItem = a.VisitType; dateTime.Value = a.StartsAt;
             duration.SelectedItem = a.DurationMinutes.ToString(); status.SelectedItem = a.Status; notes.Text = a.Notes;
         }

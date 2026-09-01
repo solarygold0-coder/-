@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using LiteDB;
 using PatientRecordsSaudi.Models;
 
@@ -10,6 +11,8 @@ namespace PatientRecordsSaudi.Services
     public sealed class AppDatabase : IDisposable
     {
         public const int MaxPatients = 10000;
+        public const long MaxAttachmentBytes = 10L * 1024L * 1024L;
+        private static readonly string[] AllowedAttachmentExtensions = { ".pdf", ".jpg", ".jpeg", ".png", ".docx" };
         private LiteDatabase db; private readonly string databasePassword; private string currentUser;
         public string DataDirectory { get; private set; }
         public string DatabasePath { get; private set; }
@@ -28,16 +31,18 @@ namespace PatientRecordsSaudi.Services
 
         private void EnsureSchema()
         {
-            var patients = db.GetCollection<Patient>("patients"); patients.EnsureIndex(x => x.FileNumber, true); patients.EnsureIndex(x => x.NationalId, true); patients.EnsureIndex(x => x.FullName); patients.EnsureIndex(x => x.NormalizedName); patients.EnsureIndex(x => x.Mobile); patients.EnsureIndex(x => x.IsArchived);
+            var patients = db.GetCollection<Patient>("patients"); patients.EnsureIndex(x => x.FileNumber, true); patients.EnsureIndex(x => x.NationalId, true); patients.EnsureIndex(x => x.FullName); patients.EnsureIndex(x => x.NormalizedName); patients.EnsureIndex(x => x.Mobile); patients.EnsureIndex(x => x.City); patients.EnsureIndex(x => x.IsArchived);
             var appointments = db.GetCollection<Appointment>("appointments"); appointments.EnsureIndex(x => x.PatientId); appointments.EnsureIndex(x => x.FileNumber); appointments.EnsureIndex(x => x.StartsAt); appointments.EnsureIndex(x => x.IsDeleted);
             var tasks = db.GetCollection<PatientTask>("tasks"); tasks.EnsureIndex(x => x.PatientId); tasks.EnsureIndex(x => x.FileNumber); tasks.EnsureIndex(x => x.DueAt); tasks.EnsureIndex(x => x.IsDeleted);
+            var attachments = db.GetCollection<PatientAttachment>("attachments"); attachments.EnsureIndex(x => x.PatientId); attachments.EnsureIndex(x => x.FileNumber); attachments.EnsureIndex(x => x.IsDeleted);
             db.GetCollection<ClosureDate>("closures").EnsureIndex(x => x.Date, true);
             var settings = db.GetCollection<AppSettings>("settings"); AppSettings s = settings.FindById(1);
-            if (s == null) settings.Insert(new AppSettings { Id = 1, NextFileNumber = 1, ClinicName = "المنشأة", DefaultAppointmentMinutes = 30, WorkDayStartMinutes = 8 * 60, WorkDayEndMinutes = 17 * 60, BackupIntervalHours = 4, LastBackupStatus = "لم تُنشأ نسخة بعد", UpdatedAt = DateTime.Now });
+            if (s == null) settings.Insert(DefaultSettings());
             else
             {
                 bool changed = false; if (s.WorkDayStartMinutes <= 0) { s.WorkDayStartMinutes = 8 * 60; changed = true; } if (s.WorkDayEndMinutes <= s.WorkDayStartMinutes) { s.WorkDayEndMinutes = 17 * 60; changed = true; }
                 if (s.BackupIntervalHours <= 0) { s.BackupIntervalHours = 4; changed = true; } if (s.LastBackupStatus == null) { s.LastBackupStatus = "لم تُنشأ نسخة بعد"; changed = true; } if (changed) settings.Update(s);
+                changed |= EnsureLookups(s); if (changed) settings.Update(s);
             }
             foreach (Patient p in patients.Find(x => x.NormalizedName == null || x.NormalizedName == "").ToList()) { p.NormalizedName = SaudiValidation.NormalizeArabicName(p.FullName); patients.Update(p); }
         }
@@ -47,7 +52,49 @@ namespace PatientRecordsSaudi.Services
         {
             if (settings.WorkDayStartMinutes < 0 || settings.WorkDayEndMinutes > 24 * 60 || settings.WorkDayStartMinutes >= settings.WorkDayEndMinutes) throw new InvalidOperationException("ساعات الدوام غير صحيحة.");
             if (settings.BackupIntervalHours < 1 || settings.BackupIntervalHours > 24) throw new InvalidOperationException("فترة النسخ الاحتياطي يجب أن تكون بين ساعة و24 ساعة.");
+            NormalizeLookups(settings);
             settings.Id = 1; settings.UpdatedAt = DateTime.Now; db.GetCollection<AppSettings>("settings").Upsert(settings); Audit("تعديل الإعدادات", "Settings", "1", null, settings.ClinicName); db.Checkpoint();
+        }
+        public void SetClinicLogo(string sourcePath)
+        {
+            var info = new FileInfo(sourcePath); if (!info.Exists) throw new FileNotFoundException("ملف الشعار غير موجود."); if (info.Length > 5L * 1024L * 1024L) throw new InvalidOperationException("حجم الشعار يجب ألا يتجاوز 5 ميجابايت.");
+            const string storedId = "branding/clinic_logo"; using (var input = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read)) db.FileStorage.Upload(storedId, info.Name, input);
+            AppSettings settings = GetSettings(); settings.ClinicLogoStoredId = storedId; settings.ClinicLogoFileName = info.Name; SaveSettings(settings); Audit("تحديث شعار المنشأة", "Settings", "1", null, info.Name); db.Checkpoint();
+        }
+        public byte[] GetClinicLogo()
+        {
+            AppSettings settings = GetSettings(); if (string.IsNullOrWhiteSpace(settings.ClinicLogoStoredId)) return null; var stored = db.FileStorage.FindById(settings.ClinicLogoStoredId); if (stored == null) return null; using (var output = new MemoryStream()) { stored.CopyTo(output); return output.ToArray(); }
+        }
+        public void RemoveClinicLogo()
+        {
+            AppSettings settings = GetSettings(); if (!string.IsNullOrWhiteSpace(settings.ClinicLogoStoredId)) db.FileStorage.Delete(settings.ClinicLogoStoredId); settings.ClinicLogoStoredId = ""; settings.ClinicLogoFileName = ""; SaveSettings(settings); Audit("إزالة شعار المنشأة", "Settings", "1", null, ""); db.Checkpoint();
+        }
+
+        private static AppSettings DefaultSettings()
+        {
+            var s = new AppSettings { Id = 1, NextFileNumber = 1, ClinicName = "المنشأة", DefaultAppointmentMinutes = 30, WorkDayStartMinutes = 8 * 60, WorkDayEndMinutes = 17 * 60, BackupIntervalHours = 4, LastBackupStatus = "لم تُنشأ نسخة بعد", UpdatedAt = DateTime.Now };
+            EnsureLookups(s); return s;
+        }
+        private static bool EnsureLookups(AppSettings s)
+        {
+            bool changed = false;
+            if (s.VisitTypes == null || s.VisitTypes.Count == 0) { s.VisitTypes = new List<string> { "مراجعة", "موعد جديد", "إجراء", "نتائج", "استشارة" }; changed = true; }
+            if (s.AppointmentStatuses == null || s.AppointmentStatuses.Count == 0) { s.AppointmentStatuses = new List<string> { "مؤكد", "بانتظار التأكيد", "حضر", "لم يحضر", "ملغي" }; changed = true; }
+            if (s.TaskPriorities == null || s.TaskPriorities.Count == 0) { s.TaskPriorities = new List<string> { "عادية", "مرتفعة", "عاجلة" }; changed = true; }
+            if (s.GenderOptions == null || s.GenderOptions.Count == 0) { s.GenderOptions = new List<string> { "ذكر", "أنثى" }; changed = true; }
+            if (s.BloodTypes == null || s.BloodTypes.Count == 0) { s.BloodTypes = new List<string> { "غير محدد", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-" }; changed = true; }
+            return changed;
+        }
+        private static void NormalizeLookups(AppSettings s)
+        {
+            s.VisitTypes = CleanLookup(s.VisitTypes, "أنواع الزيارة"); s.AppointmentStatuses = CleanLookup(s.AppointmentStatuses, "حالات الموعد");
+            s.TaskPriorities = CleanLookup(s.TaskPriorities, "أولويات المهام"); s.GenderOptions = CleanLookup(s.GenderOptions, "خيارات الجنس"); s.BloodTypes = CleanLookup(s.BloodTypes, "فصائل الدم");
+            if (!s.AppointmentStatuses.Contains("حضر") || !s.AppointmentStatuses.Contains("ملغي")) throw new InvalidOperationException("حالات الموعد يجب أن تتضمن «حضر» و«ملغي» لسلامة الجرد والتعارضات.");
+        }
+        private static List<string> CleanLookup(IEnumerable<string> values, string label)
+        {
+            var list = (values ?? Enumerable.Empty<string>()).Select(x => (x ?? "").Trim()).Where(x => x.Length > 0).Distinct(StringComparer.CurrentCultureIgnoreCase).Take(30).ToList();
+            if (list.Count == 0) throw new InvalidOperationException(label + " لا يمكن أن تكون فارغة."); if (list.Any(x => x.Length > 50)) throw new InvalidOperationException("قيمة في " + label + " أطول من 50 حرفًا."); return list;
         }
 
         public Patient AddPatient(Patient patient)
@@ -109,19 +156,70 @@ namespace PatientRecordsSaudi.Services
         {
             string q = (term ?? "").Trim(), digits = SaudiValidation.NormalizeDigits(q), name = SaudiValidation.NormalizeArabicName(q); var col = db.GetCollection<Patient>("patients"); IEnumerable<Patient> result;
             if (q.Length == 0) result = col.FindAll(); else if (mode == "رقم الملف") { long n; result = long.TryParse(digits, out n) ? col.Find(x => x.FileNumber == n) : Enumerable.Empty<Patient>(); }
-            else if (mode == "الهوية/الإقامة") result = col.Find(x => x.NationalId == digits); else if (mode == "رقم الجوال") result = col.Find(x => x.Mobile == SaudiValidation.NormalizeSaudiMobile(q));
+            else if (mode == "الهوية/الإقامة") result = col.Find(x => x.NationalId == digits); else if (mode == "رقم الجوال") result = col.Find(x => x.Mobile == SaudiValidation.NormalizeSaudiMobile(q)); else if (mode == "المدينة") result = col.Find(Query.Contains("City", q));
             else if (mode == "الاسم") result = col.Find(Query.Contains("NormalizedName", name)); else
             {
                 var list = new Dictionary<Guid, Patient>(); long n; if (long.TryParse(digits, out n)) { Patient p = col.FindOne(x => x.FileNumber == n); if (p != null) list[p.Id] = p; p = col.FindOne(x => x.NationalId == digits); if (p != null) list[p.Id] = p; }
                 foreach (Patient p in col.Find(Query.Contains("NormalizedName", name))) list[p.Id] = p; string phone = SaudiValidation.NormalizeSaudiMobile(q); foreach (Patient p in col.Find(x => x.Mobile == phone)) list[p.Id] = p; result = list.Values;
             }
             result = result.Where(p => includeArchived || !p.IsArchived); if (sort == "الاسم") result = result.OrderBy(p => p.FullName); else if (sort == "الأحدث") result = result.OrderByDescending(p => p.CreatedAt); else if (sort == "آخر مراجعة") result = result.OrderByDescending(p => p.LastVisitAt ?? DateTime.MinValue); else result = result.OrderBy(p => p.FileNumber);
-            return result.Take(q.Length == 0 ? 1000 : MaxPatients).ToList();
+            return result.Take(MaxPatients).ToList();
         }
 
         public int CountActivePatients() { return db.GetCollection<Patient>("patients").Count(x => !x.IsArchived); }
         public int CountAllPatients() { return db.GetCollection<Patient>("patients").Count(); }
         public IEnumerable<Patient> GetAllPatients(bool includeArchived) { return db.GetCollection<Patient>("patients").FindAll().Where(p => includeArchived || !p.IsArchived).OrderBy(p => p.FileNumber); }
+
+        public PatientAttachment AddAttachment(Guid patientId, string sourcePath, string category)
+        {
+            Patient patient = GetPatient(patientId); if (patient == null) throw new InvalidOperationException("ملف المراجع غير موجود.");
+            if (patient.IsArchived) throw new InvalidOperationException("لا يمكن إضافة مرفق إلى ملف مؤرشف قبل استعادته.");
+            if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath)) throw new FileNotFoundException("تعذر العثور على الملف المحدد.");
+            string extension = Path.GetExtension(sourcePath).ToLowerInvariant(); if (!AllowedAttachmentExtensions.Contains(extension)) throw new InvalidOperationException("نوع الملف غير مسموح. الأنواع المقبولة: PDF وJPG وPNG وDOCX.");
+            var file = new FileInfo(sourcePath); if (file.Length <= 0) throw new InvalidOperationException("الملف المحدد فارغ."); if (file.Length > MaxAttachmentBytes) throw new InvalidOperationException("حجم المرفق يتجاوز الحد الأقصى 10 ميجابايت.");
+            string storedId = "attachments/" + Guid.NewGuid().ToString("N");
+            var attachment = new PatientAttachment { Id = Guid.NewGuid(), PatientId = patient.Id, FileNumber = patient.FileNumber, OriginalName = Path.GetFileName(sourcePath), StoredId = storedId, ContentType = ContentType(extension), SizeBytes = file.Length, Sha256 = HashFile(sourcePath), Category = string.IsNullOrWhiteSpace(category) ? "أخرى" : category.Trim(), UploadedAt = DateTime.Now, UploadedBy = currentUser, IsDeleted = false };
+            try
+            {
+                using (var input = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read)) db.FileStorage.Upload(storedId, attachment.OriginalName, input);
+                db.GetCollection<PatientAttachment>("attachments").Insert(attachment); Audit("إضافة مرفق", "Attachment", attachment.Id.ToString(), patient.FileNumber, attachment.OriginalName); db.Checkpoint(); return attachment;
+            }
+            catch { try { db.FileStorage.Delete(storedId); } catch { } throw; }
+        }
+        public List<PatientAttachment> GetAttachments(Guid patientId, bool includeDeleted)
+        {
+            return db.GetCollection<PatientAttachment>("attachments").Find(x => x.PatientId == patientId).Where(x => includeDeleted || !x.IsDeleted).OrderByDescending(x => x.UploadedAt).ToList();
+        }
+        public void DeleteAttachment(Guid id)
+        {
+            PatientAttachment a = db.GetCollection<PatientAttachment>("attachments").FindById(id); if (a == null || a.IsDeleted) return; a.IsDeleted = true; a.DeletedAt = DateTime.Now; a.DeletedBy = currentUser; db.GetCollection<PatientAttachment>("attachments").Update(a); Audit("نقل مرفق إلى المحذوفات", "Attachment", id.ToString(), a.FileNumber, a.OriginalName); db.Checkpoint();
+        }
+        public void RestoreAttachment(Guid id)
+        {
+            PatientAttachment a = db.GetCollection<PatientAttachment>("attachments").FindById(id); if (a == null || !a.IsDeleted) return; if (db.FileStorage.FindById(a.StoredId) == null) throw new InvalidDataException("ملف المرفق الداخلي غير موجود."); a.IsDeleted = false; a.DeletedAt = null; a.DeletedBy = ""; db.GetCollection<PatientAttachment>("attachments").Update(a); Audit("استعادة مرفق", "Attachment", id.ToString(), a.FileNumber, a.OriginalName); db.Checkpoint();
+        }
+        public string ExportAttachmentToTemporaryFile(Guid id)
+        {
+            PatientAttachment a = db.GetCollection<PatientAttachment>("attachments").FindById(id); if (a == null || a.IsDeleted) throw new InvalidOperationException("المرفق غير متاح.");
+            string folder = Path.Combine(Path.GetTempPath(), "SaudiPatientRecordsView"); Directory.CreateDirectory(folder); string safeName = SafeFileName(a.OriginalName); string output = Path.Combine(folder, a.Id.ToString("N") + "_" + safeName);
+            var stored = db.FileStorage.FindById(a.StoredId); if (stored == null) throw new InvalidDataException("ملف المرفق الداخلي غير موجود."); using (var stream = new FileStream(output, FileMode.Create, FileAccess.Write, FileShare.Read)) stored.CopyTo(stream);
+            if (!string.Equals(HashFile(output), a.Sha256, StringComparison.OrdinalIgnoreCase)) { try { File.Delete(output); } catch { } throw new InvalidDataException("فشل فحص سلامة المرفق."); }
+            Audit("فتح مرفق", "Attachment", id.ToString(), a.FileNumber, a.OriginalName); db.Checkpoint(); return output;
+        }
+        public static void CleanupTemporaryAttachments()
+        {
+            string folder = Path.Combine(Path.GetTempPath(), "SaudiPatientRecordsView"); if (!Directory.Exists(folder)) return;
+            foreach (FileInfo file in new DirectoryInfo(folder).GetFiles()) if (file.LastWriteTimeUtc < DateTime.UtcNow.AddHours(-24)) try { file.Delete(); } catch { }
+        }
+        private static string SafeFileName(string value)
+        {
+            string name = Path.GetFileName(value ?? "مرفق"); foreach (char c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '_'); return string.IsNullOrWhiteSpace(name) ? "مرفق" : name;
+        }
+        private static string ContentType(string extension)
+        {
+            if (extension == ".pdf") return "application/pdf"; if (extension == ".jpg" || extension == ".jpeg") return "image/jpeg"; if (extension == ".png") return "image/png"; return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        }
+        private static string HashFile(string path) { using (var sha = SHA256.Create()) using (var input = File.OpenRead(path)) return BitConverter.ToString(sha.ComputeHash(input)).Replace("-", "").ToLowerInvariant(); }
 
         public Appointment AddAppointment(Appointment a)
         {

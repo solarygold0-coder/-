@@ -27,15 +27,20 @@ namespace PatientRecordsSaudi.Tests
                 Assert(AppDatabase.MaxPatients == 10000, "Administrative capacity is 10,000 patients");
 
                 string adminPassword = "A!" + Guid.NewGuid().ToString("N"), employeePassword = "E!" + Guid.NewGuid().ToString("N");
-                var security = new AppSecurity(temp); SecuritySession admin = security.Configure("مدير الاختبار", adminPassword);
+                var security = new AppSecurity(temp); bool weakPasswordBlocked = false; try { security.Configure("مدير الاختبار", "12345678"); } catch (ArgumentException) { weakPasswordBlocked = true; } Assert(weakPasswordBlocked, "Strong password policy"); SecuritySession admin = security.Configure("مدير الاختبار", adminPassword);
                 security.AddUser(admin, "employee", "موظف الاختبار", "موظف", employeePassword); SecuritySession employee = security.Login("employee", employeePassword);
                 Assert(employee.DisplayName == "موظف الاختبار" && !employee.IsAdmin, "Per-user login and role");
+                string lockPassword = "L!7" + Guid.NewGuid().ToString("N"), wrongPassword = "W!9" + Guid.NewGuid().ToString("N"); security.AddUser(admin, "locktest", "اختبار القفل", "موظف", lockPassword); for (int i = 0; i < 5; i++) try { security.Login("locktest", wrongPassword); } catch (UnauthorizedAccessException) { }
+                bool lockedOut = false; try { security.Login("locktest", lockPassword); } catch (UnauthorizedAccessException) { lockedOut = true; } Assert(lockedOut, "Temporary lockout after repeated failures");
 
                 using (var db = new AppDatabase(temp, admin.DatabasePassword, admin.DisplayName))
                 {
                     Patient one = db.AddPatient(NewPatient(id1, "مراجع الاختبار الأول", TestMobile(1)));
                     Patient two = db.AddPatient(NewPatient(id2, "مراجع الاختبار الثاني", TestMobile(2)));
                     Assert(one.FileNumber == 1 && two.FileNumber == 2, "Sequential file numbering starts at 1");
+                    AppSettings settings = db.GetSettings(); Assert(settings.VisitTypes.Count > 0 && settings.AppointmentStatuses.Contains("حضر"), "Default configurable lookups"); settings.VisitTypes.Add("زيارة اختبار"); db.SaveSettings(settings); Assert(db.GetSettings().VisitTypes.Contains("زيارة اختبار"), "Lookup customization persisted");
+                    string attachmentSource = Path.Combine(temp, "test.pdf"); File.WriteAllText(attachmentSource, "%PDF-1.4 test attachment"); PatientAttachment attachment = db.AddAttachment(two.Id, attachmentSource, "نتيجة");
+                    Assert(db.GetAttachments(two.Id, false).Count == 1 && attachment.SizeBytes > 0, "Encrypted attachment stored in database"); string attachmentCopy = db.ExportAttachmentToTemporaryFile(attachment.Id); Assert(File.ReadAllText(attachmentCopy) == "%PDF-1.4 test attachment", "Attachment integrity verified on open"); db.DeleteAttachment(attachment.Id); Assert(db.GetAttachments(two.Id, false).Count == 0, "Attachment soft delete"); db.RestoreAttachment(attachment.Id); Assert(db.GetAttachments(two.Id, false).Count == 1, "Attachment restore");
                     db.ArchivePatient(one.Id, "اختبار");
                     Patient three = db.AddPatient(NewPatient(id3, "مراجع الاختبار الثالث", TestMobile(3)));
                     Assert(three.FileNumber == 3, "Deleted/archived number is not reused");

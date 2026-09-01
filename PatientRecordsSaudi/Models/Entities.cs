@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using LiteDB;
 
@@ -102,13 +103,42 @@ namespace PatientRecordsSaudi.Models
         public string ClinicName { get; set; }
         public string ClinicPhone { get; set; }
         public string ClinicAddress { get; set; }
+        public string ClinicLogoStoredId { get; set; }
+        public string ClinicLogoFileName { get; set; }
         public int DefaultAppointmentMinutes { get; set; }
         public int WorkDayStartMinutes { get; set; }
         public int WorkDayEndMinutes { get; set; }
         public int BackupIntervalHours { get; set; }
         public DateTime? LastAutoBackupAt { get; set; }
         public string LastBackupStatus { get; set; }
+        public List<string> VisitTypes { get; set; }
+        public List<string> AppointmentStatuses { get; set; }
+        public List<string> TaskPriorities { get; set; }
+        public List<string> GenderOptions { get; set; }
+        public List<string> BloodTypes { get; set; }
         public DateTime UpdatedAt { get; set; }
+    }
+
+    public sealed class PatientAttachment
+    {
+        [BsonId] public Guid Id { get; set; }
+        public Guid PatientId { get; set; }
+        public long FileNumber { get; set; }
+        public string OriginalName { get; set; }
+        public string StoredId { get; set; }
+        public string ContentType { get; set; }
+        public long SizeBytes { get; set; }
+        public string Sha256 { get; set; }
+        public string Category { get; set; }
+        public DateTime UploadedAt { get; set; }
+        public string UploadedBy { get; set; }
+        public bool IsDeleted { get; set; }
+        public DateTime? DeletedAt { get; set; }
+        public string DeletedBy { get; set; }
+
+        [BsonIgnore] public string SizeText { get { return SizeBytes < 1024 * 1024 ? Math.Max(1, SizeBytes / 1024).ToString("N0") + " ك.ب" : (SizeBytes / 1024d / 1024d).ToString("N1") + " م.ب"; } }
+        [BsonIgnore] public string UploadedText { get { return UploadedAt.ToString("yyyy/MM/dd HH:mm", CultureInfo.InvariantCulture); } }
+        [BsonIgnore] public string StatusText { get { return IsDeleted ? "محذوف" : "متاح"; } }
     }
 
     public sealed class ClosureDate
