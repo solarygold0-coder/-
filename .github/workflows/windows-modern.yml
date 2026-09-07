@@ -59,7 +59,7 @@ jobs:
           $signature = Get-AuthenticodeSignature $target
           $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe -File |
             Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
-            Sort-Object { [version]$_.VersionInfo.FileVersion } -Descending |
+            Sort-Object FullName -Descending |
             Select-Object -First 1
           if (-not $signtool) { throw "Microsoft SignTool was not found." }
           & $signtool.FullName verify /pa /v $target
