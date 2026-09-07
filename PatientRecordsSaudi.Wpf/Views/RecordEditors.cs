@@ -13,7 +13,7 @@ namespace PatientRecordsSaudi.Wpf.Views
     internal abstract class EditorWindowBase : Window
     {
         protected readonly StackPanel FormPanel = new StackPanel();
-        private readonly DockPanel root = new DockPanel(); private readonly StackPanel buttonPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(4, 10) };
+        private readonly DockPanel root = new DockPanel(); private readonly StackPanel buttonPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(4, 10, 4, 10) };
         protected EditorWindowBase(string title, double width, double height)
         {
             Title = title; Width = width; Height = height; MinWidth = Math.Min(width, 620); MinHeight = Math.Min(height, 520); WindowStartupLocation = WindowStartupLocation.CenterOwner;
