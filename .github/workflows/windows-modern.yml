@@ -57,7 +57,13 @@ jobs:
           $target = ".\PersonalRelease\Saudi-Patient-Records-v3.0.0-x64.msix"
           Copy-Item $package.FullName $target -Force
           $signature = Get-AuthenticodeSignature $target
-          if ($signature.Status -ne "Valid") { throw "The MSIX signature is not valid: $($signature.Status)" }
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe -File |
+            Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
+            Sort-Object { [version]$_.VersionInfo.FileVersion } -Descending |
+            Select-Object -First 1
+          if (-not $signtool) { throw "Microsoft SignTool was not found." }
+          & $signtool.FullName verify /pa /v $target
+          if ($LASTEXITCODE -ne 0) { throw "Microsoft SignTool rejected the MSIX signature." }
           if ($signature.SignerCertificate.Subject -ne "CN=Mohammed Mousa Asiri") { throw "Unexpected signer subject." }
           if (Get-ChildItem .\PersonalRelease -Recurse -Filter "*setup*.exe" -File) { throw "A legacy setup executable was unexpectedly produced." }
           $hash = (Get-FileHash $target -Algorithm SHA256).Hash
