@@ -67,7 +67,7 @@ jobs:
           $verifyOutput = (Get-Content .\signtool-out.txt -Raw) + (Get-Content .\signtool-err.txt -Raw)
           Write-Host $verifyOutput
           if ($verifyOutput -notmatch "Signature Index: 0" -or $verifyOutput -notmatch "Issued to: Mohammed Mousa Asiri") { throw "Microsoft SignTool did not find the expected MSIX signature." }
-          if ($verifyExit -ne 0 -and $verifyOutput -notmatch "root certificate which is not trusted") { throw "Microsoft SignTool rejected the MSIX signature for an unexpected reason." }
+          if ($verifyExit -ne 0 -and $verifyOutput -notmatch "not trusted by the trust provider") { throw "Microsoft SignTool rejected the MSIX signature for an unexpected reason." }
           if ($signature.SignerCertificate.Subject -ne "CN=Mohammed Mousa Asiri") { throw "Unexpected signer subject." }
           if (Get-ChildItem .\PersonalRelease -Recurse -Filter "*setup*.exe" -File) { throw "A legacy setup executable was unexpectedly produced." }
           $hash = (Get-FileHash $target -Algorithm SHA256).Hash
