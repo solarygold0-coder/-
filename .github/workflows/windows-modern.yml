@@ -1,0 +1,47 @@
+name: Modern WinUI MSIX
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-test-package:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build modern core and run safety tests
+        shell: powershell
+        run: |
+          dotnet restore .\PatientRecordsSaudi.Modern.Tests\PatientRecordsSaudi.Modern.Tests.csproj
+          dotnet build .\PatientRecordsSaudi.Modern.Tests\PatientRecordsSaudi.Modern.Tests.csproj -c Release --no-restore
+          dotnet run --project .\PatientRecordsSaudi.Modern.Tests\PatientRecordsSaudi.Modern.Tests.csproj -c Release --no-build
+
+      - name: Build WinUI 3 and Store MSIX package
+        shell: powershell
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe | Select-Object -First 1
+          if (-not $msbuild) { throw "MSBuild was not found." }
+          & $msbuild .\PatientRecordsSaudi.WinUI\PatientRecordsSaudi.WinUI.csproj /restore /t:Build /p:Configuration=Release /p:Platform=x64 /p:AppxBundle=Never /p:GenerateAppxPackageOnBuild=true /p:AppxPackageSigningEnabled=false /p:UapAppxPackageBuildMode=StoreUpload /m
+          if ($LASTEXITCODE -ne 0) { throw "WinUI/MSIX build failed." }
+
+      - name: Verify package is MSIX and not legacy setup
+        shell: powershell
+        run: |
+          $packages = @(Get-ChildItem .\PatientRecordsSaudi.WinUI -Recurse -File | Where-Object { $_.Extension -in @(".msix", ".msixbundle", ".msixupload") })
+          if ($packages.Count -eq 0) { throw "No MSIX package was produced." }
+          if (Get-ChildItem .\PatientRecordsSaudi.WinUI -Recurse -Filter "*setup*.exe" -File) { throw "A legacy setup executable was unexpectedly produced." }
+          $packages | ForEach-Object { Write-Host "$($_.Name) $((Get-FileHash $_.FullName -Algorithm SHA256).Hash)" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Saudi-Patient-Records-WinUI3-STORE-SUBMISSION-v3.0.0
+          if-no-files-found: error
+          path: |
+            PatientRecordsSaudi.WinUI/AppPackages/**
+            PatientRecordsSaudi.WinUI/bin/x64/Release/**/PatientRecordsSaudi.WinUI.exe
