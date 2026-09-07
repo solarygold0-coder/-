@@ -62,8 +62,9 @@ jobs:
             Sort-Object FullName -Descending |
             Select-Object -First 1
           if (-not $signtool) { throw "Microsoft SignTool was not found." }
-          $verifyOutput = (& $signtool.FullName verify /pa /v $target 2>&1 | Out-String)
-          $verifyExit = $LASTEXITCODE
+          $verifyProcess = Start-Process $signtool.FullName -ArgumentList @("verify", "/pa", "/v", $target) -Wait -PassThru -NoNewWindow -RedirectStandardOutput .\signtool-out.txt -RedirectStandardError .\signtool-err.txt
+          $verifyExit = $verifyProcess.ExitCode
+          $verifyOutput = (Get-Content .\signtool-out.txt -Raw) + (Get-Content .\signtool-err.txt -Raw)
           Write-Host $verifyOutput
           if ($verifyOutput -notmatch "Signature Index: 0" -or $verifyOutput -notmatch "Issued to: Mohammed Mousa Asiri") { throw "Microsoft SignTool did not find the expected MSIX signature." }
           if ($verifyExit -ne 0 -and $verifyOutput -notmatch "root certificate which is not trusted") { throw "Microsoft SignTool rejected the MSIX signature for an unexpected reason." }
