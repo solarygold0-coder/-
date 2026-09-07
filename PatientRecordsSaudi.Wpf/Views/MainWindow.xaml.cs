@@ -115,7 +115,7 @@ namespace PatientRecordsSaudi.Wpf.Views
         }
         private void CheckReminders()
         {
-            DateTime now = DateTime.Now; Appointment a = database.GetNextUnnotifiedAppointment(now, now.AddMinutes(30)); PatientTask t = database.GetNextUnnotifiedTask(now.AddMinutes(-5), now.AddMinutes(30));
+            DateTime now = DateTime.Now; Appointment a = database.GetNextUnnotifiedAppointment(now, now.AddDays(2)); PatientTask t = database.GetNextUnnotifiedTask(now.AddDays(-7), now.AddMinutes(5));
             Guid patientId = Guid.Empty; string message = null;
             if (a != null) { database.MarkAppointmentNotified(a.Id); patientId = a.PatientId; message = "موعد قريب: " + a.Title + "\nالمراجع: " + a.PatientName + "\n" + a.TimeText + "\n\nفتح ملف المراجع؟"; }
             else if (t != null) { database.MarkTaskNotified(t.Id); patientId = t.PatientId; message = "تنبيه مهمة: " + t.Title + "\nالمراجع: " + t.PatientName + "\n\nفتح ملف المراجع؟"; }
