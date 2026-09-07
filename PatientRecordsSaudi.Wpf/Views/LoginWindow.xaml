@@ -1,0 +1,17 @@
+<Window x:Class="PatientRecordsSaudi.Wpf.Views.LoginWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="الدخول إلى سجلات المراجعين" Width="520" Height="480" WindowStartupLocation="CenterScreen" ResizeMode="NoResize">
+  <Border Margin="24" Background="White" CornerRadius="9" BorderBrush="#D8E3E6" BorderThickness="1" Padding="28">
+    <Grid>
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+      <TextBlock Grid.Row="0" Text="نظام إدارة سجلات المراجعين" Foreground="{StaticResource PrimaryBrush}" FontWeight="Bold" FontSize="24" HorizontalAlignment="Center" Margin="0,0,0,18"/>
+      <TextBlock x:Name="ModeText" Grid.Row="1" Text="تسجيل الدخول" FontWeight="Bold" FontSize="17" Margin="4"/>
+      <StackPanel x:Name="DisplayPanel" Grid.Row="2"><TextBlock Text="اسم المسؤول" Margin="4"/><TextBox x:Name="DisplayNameBox" MaxLength="100"/></StackPanel>
+      <StackPanel x:Name="UsernamePanel" Grid.Row="3"><TextBlock Text="اسم المستخدم" Margin="4"/><TextBox x:Name="UsernameBox" MaxLength="50" Text="admin" FlowDirection="LeftToRight"/></StackPanel>
+      <StackPanel Grid.Row="4"><TextBlock Text="كلمة المرور" Margin="4"/><PasswordBox x:Name="PasswordBox" MinHeight="34" Margin="4" Padding="7" FlowDirection="LeftToRight"/></StackPanel>
+      <StackPanel x:Name="ConfirmPanel" Grid.Row="5"><TextBlock Text="تأكيد كلمة المرور" Margin="4"/><PasswordBox x:Name="ConfirmBox" MinHeight="34" Margin="4" Padding="7" FlowDirection="LeftToRight"/></StackPanel>
+      <StackPanel Grid.Row="6" Margin="0,18,0,0"><TextBlock x:Name="ErrorText" Foreground="{StaticResource DangerBrush}" TextWrapping="Wrap" Margin="4"/><Button x:Name="SubmitButton" Content="دخول" Click="Submit_Click" IsDefault="True"/><Button Content="إغلاق" Click="Close_Click" Style="{StaticResource DangerButton}" IsCancel="True"/></StackPanel>
+    </Grid>
+  </Border>
+</Window>
