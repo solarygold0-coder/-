@@ -1,0 +1,153 @@
+name: Patient Records v1.3.2 Revision 2 Build and Signed Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-and-sign:
+    runs-on: windows-2022
+    env:
+      SOURCE_ARCHIVE: SaudiPatientRecords_Source_v1.3.2_FIXED_REV2_READY_FOR_SIGNING.zip
+      SOURCE_DIR: fixed
+      ESIGNER_INSTALL_DIR: C:\Users\runneradmin\eSignerCKA
+      ESIGNER_MASTER_KEY: C:\Users\runneradmin\eSignerCKA\master.key
+      EXPECTED_PUBLISHER: Mohammed Mousa Asiri
+      RELEASE_VERSION: 1.3.2
+      ESIGNER_CKA_VERSION: 1.1.2
+      ESIGNER_CKA_SHA256: ${{ vars.ESIGNER_CKA_SHA256 }}
+      SSL_COM_USERNAME: ${{ secrets.SSL_COM_USERNAME }}
+      SSL_COM_PASSWORD: ${{ secrets.SSL_COM_PASSWORD }}
+      SSL_COM_TOTP_SECRET: ${{ secrets.SSL_COM_TOTP_SECRET }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Extract fixed source
+        shell: powershell
+        run: |
+          if (-not (Test-Path $env:SOURCE_ARCHIVE)) {
+            throw "Fixed source archive was not found."
+          }
+          if (Test-Path $env:SOURCE_DIR) {
+            Remove-Item $env:SOURCE_DIR -Recurse -Force
+          }
+          Expand-Archive -Path $env:SOURCE_ARCHIVE -DestinationPath $env:SOURCE_DIR
+
+      - name: Build and run tests
+        shell: powershell
+        working-directory: fixed
+        run: .\build-windows.ps1
+
+      - name: Ensure Inno Setup
+        shell: powershell
+        run: |
+          if (-not (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --no-progress -y
+          }
+
+      - name: Build unsigned QA installer
+        shell: powershell
+        working-directory: fixed
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" .\Installer.iss'
+
+      - name: Mark QA package as unsigned
+        shell: powershell
+        working-directory: fixed
+        run: |
+          @(
+            "UNSIGNED QA BUILD - NOT FOR DISTRIBUTION"
+            "This artifact only proves compilation and automated tests."
+          ) | Out-File -FilePath .\release\UNSIGNED_BUILD.txt -Encoding utf8
+
+      - name: Upload unsigned QA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Saudi-Patient-Records-Windows-UNSIGNED-QA-v1.3.2
+          if-no-files-found: error
+          path: |
+            fixed/release/تثبيت_نظام_سجلات_المراجعين.exe
+            fixed/release/App/**
+            fixed/release/UNSIGNED_BUILD.txt
+
+      - name: Validate trusted-signing configuration
+        shell: powershell
+        run: |
+          foreach ($name in @("SSL_COM_USERNAME", "SSL_COM_PASSWORD", "SSL_COM_TOTP_SECRET", "ESIGNER_CKA_SHA256")) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              throw "Required trusted-signing setting '$name' is missing."
+            }
+          }
+
+      - name: Install eSigner Cloud Key Adapter
+        shell: powershell
+        working-directory: fixed
+        run: |
+          $download = "https://github.com/SSLcom/eSignerCKA/releases/download/v$env:ESIGNER_CKA_VERSION/SSL.COM-eSigner-CKA_$env:ESIGNER_CKA_VERSION.zip"
+          Invoke-WebRequest -OutFile eSigner_CKA_Setup.zip $download
+          $actualHash = (Get-FileHash .\eSigner_CKA_Setup.zip -Algorithm SHA256).Hash
+          if ($actualHash -ne $env:ESIGNER_CKA_SHA256.Trim().ToUpperInvariant()) {
+            throw "eSigner CKA archive hash mismatch."
+          }
+          Expand-Archive -Force eSigner_CKA_Setup.zip
+          Move-Item -Destination "eSigner_CKA_Installer.exe" -Path "eSigner_CKA_*\*.exe"
+          New-Item -ItemType Directory -Force -Path $env:ESIGNER_INSTALL_DIR | Out-Null
+          Start-Process ".\eSigner_CKA_Installer.exe" -ArgumentList "/CURRENTUSER /VERYSILENT /SUPPRESSMSGBOXES /DIR=`"$env:ESIGNER_INSTALL_DIR`"" -Wait
+          Start-Process ".\setup\vc_redist.x86.exe" -ArgumentList "/install /q" -Wait
+          Start-Process ".\setup\vc_redist.x64.exe" -ArgumentList "/install /q" -Wait
+          & "$env:ESIGNER_INSTALL_DIR\RegisterKSP.exe" | Out-Null
+          & "$env:ESIGNER_INSTALL_DIR\eSignerCSP.Config.exe" | Out-Null
+
+      - name: Load verified publisher certificate
+        shell: powershell
+        working-directory: fixed
+        run: |
+          & "$env:ESIGNER_INSTALL_DIR\eSignerCKATool.exe" config -mode "product" -user $env:SSL_COM_USERNAME -pass $env:SSL_COM_PASSWORD -totp $env:SSL_COM_TOTP_SECRET -key $env:ESIGNER_MASTER_KEY -r
+          & "$env:ESIGNER_INSTALL_DIR\eSignerCKATool.exe" unload
+          & "$env:ESIGNER_INSTALL_DIR\eSignerCKATool.exe" load
+
+      - name: Sign and verify application files
+        shell: powershell
+        working-directory: fixed
+        run: .\sign-windows-artifacts.ps1 -Path .\release\App -Publisher $env:EXPECTED_PUBLISHER
+
+      - name: Rebuild installer from signed files
+        shell: powershell
+        working-directory: fixed
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" .\Installer.iss'
+
+      - name: Sign and verify installer
+        shell: powershell
+        working-directory: fixed
+        run: .\sign-windows-artifacts.ps1 -Path .\release\تثبيت_نظام_سجلات_المراجعين.exe -Publisher $env:EXPECTED_PUBLISHER
+
+      - name: Create signature report and SHA-256 fingerprints
+        shell: powershell
+        working-directory: fixed
+        run: .\new-release-integrity.ps1 -ReleaseDirectory .\release -Publisher $env:EXPECTED_PUBLISHER -ReleaseVersion $env:RELEASE_VERSION
+
+      - name: Upload verified signed release
+        uses: actions/upload-artifact@v4
+        with:
+          name: Saudi-Patient-Records-Windows-SIGNED-v1.3.2
+          if-no-files-found: error
+          path: |
+            fixed/release/تثبيت_نظام_سجلات_المراجعين.exe
+            fixed/release/App/**
+            fixed/release/SHA256SUMS.txt
+            fixed/release/SIGNATURE_REPORT.txt
+            fixed/release/VERSION.txt
+
+      - name: Remove signing session
+        if: always()
+        shell: powershell
+        working-directory: fixed
+        run: |
+          if (Test-Path "$env:ESIGNER_INSTALL_DIR\eSignerCKATool.exe") {
+            & "$env:ESIGNER_INSTALL_DIR\eSignerCKATool.exe" unload
+          }
+          Remove-Item $env:ESIGNER_MASTER_KEY -Force -ErrorAction SilentlyContinue
+          Remove-Item .\eSigner_CKA_Setup.zip, .\eSigner_CKA_Installer.exe -Force -ErrorAction SilentlyContinue
