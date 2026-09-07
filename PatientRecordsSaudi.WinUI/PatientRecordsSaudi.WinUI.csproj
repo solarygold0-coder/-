@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>PatientRecordsSaudi.WinUI</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x64;arm64</Platforms>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <UseWinUI>true</UseWinUI>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <WindowsPackageType>MSIX</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
+    <AppxBundle>Always</AppxBundle>
+    <AppxBundlePlatforms>x64|arm64</AppxBundlePlatforms>
+    <GenerateAppInstallerFile>false</GenerateAppInstallerFile>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Version>3.0.0</Version>
+    <Company>Mohammed Mousa Asiri</Company>
+    <Product>Saudi Patient Records</Product>
+    <Copyright>Copyright © Mohammed Mousa Asiri 2026</Copyright>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.4.0" />
+  </ItemGroup>
+  <ItemGroup><ProjectReference Include="..\PatientRecordsSaudi.Modern.Core\PatientRecordsSaudi.Modern.Core.csproj" /></ItemGroup>
+  <ItemGroup>
+    <Content Include="Assets\StoreLogo.png" /><Content Include="Assets\Square44x44Logo.png" /><Content Include="Assets\Square150x150Logo.png" /><Content Include="Assets\Wide310x150Logo.png" /><Content Include="Assets\SplashScreen.png" />
+  </ItemGroup>
+</Project>
