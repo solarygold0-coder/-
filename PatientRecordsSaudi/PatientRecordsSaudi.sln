@@ -6,6 +6,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PatientRecordsSaudi", "Pati
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PatientRecordsSaudi.Tests", "..\PatientRecordsSaudi.Tests\PatientRecordsSaudi.Tests.csproj", "{0A00AB2A-15AD-4F06-909D-36407839DF71}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PatientRecordsSaudi.Core", "..\PatientRecordsSaudi.Core\PatientRecordsSaudi.Core.csproj", "{69272C26-899D-4E19-BF43-5C265B272B83}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PatientRecordsSaudi.Wpf", "..\PatientRecordsSaudi.Wpf\PatientRecordsSaudi.Wpf.csproj", "{F65AF896-D85C-49FB-BF85-BD9CBD313157}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -20,5 +24,13 @@ Global
 		{0A00AB2A-15AD-4F06-909D-36407839DF71}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0A00AB2A-15AD-4F06-909D-36407839DF71}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0A00AB2A-15AD-4F06-909D-36407839DF71}.Release|Any CPU.Build.0 = Release|Any CPU
+		{69272C26-899D-4E19-BF43-5C265B272B83}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{69272C26-899D-4E19-BF43-5C265B272B83}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{69272C26-899D-4E19-BF43-5C265B272B83}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{69272C26-899D-4E19-BF43-5C265B272B83}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F65AF896-D85C-49FB-BF85-BD9CBD313157}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F65AF896-D85C-49FB-BF85-BD9CBD313157}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F65AF896-D85C-49FB-BF85-BD9CBD313157}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F65AF896-D85C-49FB-BF85-BD9CBD313157}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

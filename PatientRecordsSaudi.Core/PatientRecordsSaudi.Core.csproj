@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{69272C26-899D-4E19-BF43-5C265B272B83}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <RootNamespace>PatientRecordsSaudi</RootNamespace>
+    <AssemblyName>PatientRecordsSaudi.Core</AssemblyName>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <LangVersion>7.3</LangVersion>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols><DebugType>full</DebugType><Optimize>false</Optimize><OutputPath>bin\Debug\</OutputPath>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>none</DebugType><Optimize>true</Optimize><OutputPath>bin\Release\</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" /><Reference Include="System.Core" /><Reference Include="System.Data" />
+    <Reference Include="System.IO.Compression" /><Reference Include="System.IO.Compression.FileSystem" />
+    <Reference Include="System.Security" /><Reference Include="System.Web.Extensions" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\PatientRecordsSaudi\Models\Entities.cs"><Link>Domain\Entities.cs</Link></Compile>
+    <Compile Include="..\PatientRecordsSaudi\Services\SaudiValidation.cs"><Link>Application\SaudiValidation.cs</Link></Compile>
+    <Compile Include="..\PatientRecordsSaudi\Services\AppDatabase.cs"><Link>Infrastructure\AppDatabase.cs</Link></Compile>
+    <Compile Include="..\PatientRecordsSaudi\Services\AppSecurity.cs"><Link>Infrastructure\AppSecurity.cs</Link></Compile>
+    <Compile Include="..\PatientRecordsSaudi\Services\BackupService.cs"><Link>Infrastructure\BackupService.cs</Link></Compile>
+    <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup><PackageReference Include="LiteDB" Version="5.0.21" /></ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>

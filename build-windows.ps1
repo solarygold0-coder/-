@@ -12,6 +12,10 @@ if ($LASTEXITCODE -ne 0) { throw "Build failed." }
 & (Join-Path $root "PatientRecordsSaudi.Tests\bin\Release\PatientRecordsSaudi.Tests.exe")
 if ($LASTEXITCODE -ne 0) { throw "Safety tests failed." }
 $out = Join-Path $root "release\App"
+if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $out | Out-Null
-Copy-Item (Join-Path $root "PatientRecordsSaudi\bin\Release\*") $out -Recurse -Force
+Copy-Item (Join-Path $root "PatientRecordsSaudi.Wpf\bin\Release\*") $out -Recurse -Force
+Get-ChildItem $out -Filter *.pdb -Recurse | Remove-Item -Force
+$applicationExe = Get-ChildItem -LiteralPath $out -Filter *.exe -File | Select-Object -First 1
+if (-not $applicationExe) { throw "The application EXE was not produced." }
 Write-Host "Build succeeded: $out"
