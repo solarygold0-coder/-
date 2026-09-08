@@ -3,10 +3,10 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <RootNamespace>PatientRecordsSaudi</RootNamespace>
     <AssemblyName>PatientRecordsSaudi.Modern.Core</AssemblyName>
-    <Nullable>disable</Nullable>
+    <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <LangVersion>14.0</LangVersion>
-    <Version>4.0.0</Version>
+    <Version>4.1.0</Version>
     <Company>Mohammed Mousa Asiri</Company>
     <Product>Saudi Patient Records</Product>
     <Copyright>Copyright © Mohammed Mousa Asiri 2026</Copyright>

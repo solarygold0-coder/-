@@ -27,15 +27,26 @@ namespace PatientRecordsSaudi.Tests
                 Assert(!SaudiValidation.IsOfficialWorkingDay(new DateTime(2026, 9, 5)), "Saturday rejected");
                 Assert(AppDatabase.MaxPatients == 10000, "Administrative capacity is 10,000 patients");
 
-                string adminPassword = "A!" + Guid.NewGuid().ToString("N"), employeePassword = "E!" + Guid.NewGuid().ToString("N");
-                var security = new AppSecurity(temp); bool weakPasswordBlocked = false; try { security.Configure("مدير الاختبار", "12345678"); } catch (ArgumentException) { weakPasswordBlocked = true; } Assert(weakPasswordBlocked, "Strong password policy"); SecuritySession admin = security.Configure("مدير الاختبار", adminPassword);
+                string defaultFolder = Path.Combine(temp, "default-login"); Directory.CreateDirectory(defaultFolder); var defaultSecurity = new AppSecurity(defaultFolder);
+                Assert(defaultSecurity.EnsureDefaultConfiguration(), "Default admin configuration is created automatically");
+                using (SecuritySession defaultSession = defaultSecurity.Login("admin", "admin"))
+                {
+                    Assert(defaultSession.IsAdmin && defaultSession.UsesDefaultCredentials, "Default admin/admin login works and is flagged for warning");
+                    defaultSecurity.ChangePassword(defaultSession, "admin", "safe1234"); Assert(!defaultSession.UsesDefaultCredentials, "Default credential warning clears after password change");
+                }
+                using (SecuritySession changedSession = defaultSecurity.Login("admin", "safe1234")) Assert(changedSession.IsAdmin, "Customized admin password works");
+
+                string adminPassword = "test1234", employeePassword = "empl1234";
+                var security = new AppSecurity(temp); bool invalidPasswordBlocked = false; try { security.Configure("مدير الاختبار", "UPPER1"); } catch (ArgumentException) { invalidPasswordBlocked = true; } Assert(invalidPasswordBlocked, "Custom password policy rejects uppercase and requires lowercase letters plus digits"); SecuritySession admin = security.Configure("مدير الاختبار", adminPassword);
+                bool overLimitBlocked = false; try { security.AddUser(admin, "baduser", "مستخدم غير صالح", "موظف", "abcde1234"); } catch (ArgumentException) { overLimitBlocked = true; } Assert(overLimitBlocked, "Custom password policy enforces four-letter maximum");
                 security.AddUser(admin, "employee", "موظف الاختبار", "موظف", employeePassword); SecuritySession employee = security.Login("employee", employeePassword);
                 Assert(employee.DisplayName == "موظف الاختبار" && !employee.IsAdmin, "Per-user login and role");
-                string lockPassword = "L!7" + Guid.NewGuid().ToString("N"), wrongPassword = "W!9" + Guid.NewGuid().ToString("N"); security.AddUser(admin, "locktest", "اختبار القفل", "موظف", lockPassword); for (int i = 0; i < 5; i++) try { security.Login("locktest", wrongPassword); } catch (UnauthorizedAccessException) { }
+                string lockPassword = "lock1234", wrongPassword = "fail1234"; security.AddUser(admin, "locktest", "اختبار القفل", "موظف", lockPassword); for (int i = 0; i < 5; i++) try { security.Login("locktest", wrongPassword); } catch (UnauthorizedAccessException) { }
                 bool lockedOut = false; try { security.Login("locktest", lockPassword); } catch (UnauthorizedAccessException) { lockedOut = true; } Assert(lockedOut, "Temporary lockout after repeated failures");
                 Assert(!File.Exists(Path.Combine(temp, "auth.dat.bak")), "Obsolete authentication backup is not retained");
+                Assert(File.ReadAllBytes(Path.Combine(temp, "auth.dat"))[0] != (byte)'{', "Authentication store is protected with Windows DPAPI");
 
-                using (var db = new AppDatabase(temp, admin.DatabasePassword, admin.DisplayName))
+                using (var db = new AppDatabase(temp, admin.MaterializeDatabasePassword(), admin.DisplayName))
                 {
                     security.FlushPendingAudit(db); Assert(db.GetAllAudit().Exists(x => x.EntityType == "Security"), "Security events are imported into audit log");
                     Patient one = db.AddPatient(NewPatient(id1, "مراجع الاختبار الأول", TestMobile(1)));
@@ -76,16 +87,17 @@ namespace PatientRecordsSaudi.Tests
                     Assert(closureBlocked, "Configured closure date blocks appointments");
                     db.DeleteAttachment(attachment.Id); Assert(db.PurgeDeletedAttachments(DateTime.Now.AddDays(1)) == 1 && db.GetAttachments(two.Id, true).Count == 0, "Old deleted attachments can be permanently purged by admin");
                 }
-                AppDatabase.CleanupTemporaryAttachments(); Assert(!Directory.Exists(Path.Combine(Path.GetTempPath(), "SaudiPatientRecordsView")), "Decrypted temporary attachments are removed");
-                using (var readOnlyDb = new AppDatabase(temp, admin.DatabasePassword, employee.DisplayName, "قراءة فقط"))
+                AppDatabase.CleanupTemporaryAttachments(); Assert(!Directory.EnumerateDirectories(Path.GetTempPath(), "SaudiPatientRecordsView_*").Any(), "Decrypted temporary attachments are removed");
+                using (var readOnlyDb = new AppDatabase(temp, admin.MaterializeDatabasePassword(), employee.DisplayName, "قراءة فقط"))
                 {
                     bool writeBlocked = false; try { readOnlyDb.AddPatient(NewPatient(id4, "مراجع للقراءة فقط", TestMobile(4))); } catch (UnauthorizedAccessException) { writeBlocked = true; } Assert(writeBlocked, "Read-only role is enforced in data layer");
                 }
-                using (var staffDb = new AppDatabase(temp, admin.DatabasePassword, employee.DisplayName, "موظف"))
+                using (var staffDb = new AppDatabase(temp, admin.MaterializeDatabasePassword(), employee.DisplayName, "موظف"))
                 {
                     bool settingsBlocked = false; try { staffDb.SaveSettings(staffDb.GetSettings()); } catch (UnauthorizedAccessException) { settingsBlocked = true; } Assert(settingsBlocked, "Admin-only settings are enforced in data layer");
                 }
                 RunTenThousandCapacityTest(temp);
+                employee.Dispose(); admin.Dispose();
                 Console.WriteLine("All checks passed."); return 0;
             }
             catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }

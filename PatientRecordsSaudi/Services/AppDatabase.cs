@@ -4,6 +4,11 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Security.AccessControl;
+using System.Security.Principal;
+using System.Diagnostics;
+using System.Text;
+using System.Threading.Tasks;
 using LiteDB;
 using PatientRecordsSaudi.Models;
 
@@ -14,7 +19,9 @@ namespace PatientRecordsSaudi.Services
         public const int MaxPatients = 10000;
         public const long MaxAttachmentBytes = 10L * 1024L * 1024L;
         private static readonly string[] AllowedAttachmentExtensions = { ".pdf", ".jpg", ".jpeg", ".png", ".docx" };
-        private LiteDatabase db; private readonly string databasePassword; private string currentUser, currentRole;
+        private const string TemporaryAttachmentPrefix = "SaudiPatientRecordsView_";
+        private static readonly string TemporaryAttachmentDirectory = Path.Combine(Path.GetTempPath(), TemporaryAttachmentPrefix + Environment.ProcessId.ToString("X") + "_" + Guid.NewGuid().ToString("N"));
+        private LiteDatabase db; private byte[] databasePasswordBytes; private string currentUser, currentRole;
         public string DataDirectory { get; private set; }
         public string DatabasePath { get; private set; }
 
@@ -22,7 +29,7 @@ namespace PatientRecordsSaudi.Services
         public AppDatabase(string dataDirectory, string password, string user) : this(dataDirectory, password, user, "مدير") { }
         public AppDatabase(string dataDirectory, string password, string user, string role)
         {
-            DataDirectory = dataDirectory; Directory.CreateDirectory(DataDirectory); DatabasePath = Path.Combine(DataDirectory, "patients.db"); databasePassword = password; currentUser = user ?? "النظام"; currentRole = string.IsNullOrWhiteSpace(role) ? "قراءة فقط" : role; Open();
+            DataDirectory = dataDirectory; Directory.CreateDirectory(DataDirectory); DatabasePath = Path.Combine(DataDirectory, "patients.db"); databasePasswordBytes = Encoding.UTF8.GetBytes(password ?? ""); currentUser = user ?? "النظام"; currentRole = string.IsNullOrWhiteSpace(role) ? "قراءة فقط" : role; Open();
         }
         public void SetCurrentUser(string user) { currentUser = string.IsNullOrWhiteSpace(user) ? "النظام" : user.Trim(); }
         public void SetCurrentSession(string user, string role) { SetCurrentUser(user); currentRole = string.IsNullOrWhiteSpace(role) ? "قراءة فقط" : role; }
@@ -31,7 +38,7 @@ namespace PatientRecordsSaudi.Services
 
         private void Open()
         {
-            db = new LiteDatabase(new ConnectionString { Filename = DatabasePath, Password = databasePassword, Connection = ConnectionType.Shared, Upgrade = false }); EnsureSchema();
+            db = new LiteDatabase(new ConnectionString { Filename = DatabasePath, Password = MaterializeDatabasePassword(), Connection = ConnectionType.Shared, Upgrade = false }); EnsureSchema();
         }
 
         private void EnsureSchema()
@@ -235,15 +242,67 @@ namespace PatientRecordsSaudi.Services
         public string ExportAttachmentToTemporaryFile(Guid id)
         {
             PatientAttachment a = db.GetCollection<PatientAttachment>("attachments").FindById(id); if (a == null || a.IsDeleted) throw new InvalidOperationException("المرفق غير متاح.");
-            string folder = Path.Combine(Path.GetTempPath(), "SaudiPatientRecordsView"); Directory.CreateDirectory(folder); string safeName = SafeFileName(a.OriginalName); string output = Path.Combine(folder, a.Id.ToString("N") + "_" + safeName);
-            var stored = db.FileStorage.FindById(a.StoredId); if (stored == null) throw new InvalidDataException("ملف المرفق الداخلي غير موجود."); using (var stream = new FileStream(output, FileMode.Create, FileAccess.Write, FileShare.Read)) stored.CopyTo(stream);
-            if (!string.Equals(HashFile(output), a.Sha256, StringComparison.OrdinalIgnoreCase)) { try { File.Delete(output); } catch { } throw new InvalidDataException("فشل فحص سلامة المرفق."); }
+            EnsurePrivateDirectory(TemporaryAttachmentDirectory); string safeName = SafeFileName(a.OriginalName); string output = Path.Combine(TemporaryAttachmentDirectory, a.Id.ToString("N") + "_" + safeName);
+            var stored = db.FileStorage.FindById(a.StoredId); if (stored == null) throw new InvalidDataException("ملف المرفق الداخلي غير موجود."); using (var stream = new FileStream(output, FileMode.Create, FileAccess.Write, FileShare.None)) stored.CopyTo(stream);
+            TryRestrictFileToCurrentUser(output); TryMarkTemporary(output);
+            if (!string.Equals(HashFile(output), a.Sha256, StringComparison.OrdinalIgnoreCase)) { SecureDeleteFile(output); throw new InvalidDataException("فشل فحص سلامة المرفق."); }
             Audit("فتح مرفق", "Attachment", id.ToString(), a.FileNumber, a.OriginalName); db.Checkpoint(); return output;
+        }
+        public static void ScheduleTemporaryAttachmentCleanup(string path, Process viewer)
+        {
+            if (string.IsNullOrWhiteSpace(path) || viewer == null) return;
+            try
+            {
+                viewer.EnableRaisingEvents = true;
+                viewer.Exited += async delegate { await Task.Delay(3000).ConfigureAwait(false); SecureDeleteFile(path); };
+                if (viewer.HasExited) Task.Run(async delegate { await Task.Delay(3000).ConfigureAwait(false); SecureDeleteFile(path); });
+            }
+            catch { }
         }
         public static void CleanupTemporaryAttachments()
         {
-            string folder = Path.Combine(Path.GetTempPath(), "SaudiPatientRecordsView"); if (!Directory.Exists(folder)) return;
-            try { Directory.Delete(folder, true); } catch { foreach (FileInfo file in new DirectoryInfo(folder).GetFiles()) try { file.Delete(); } catch { } }
+            try
+            {
+                foreach (string folder in Directory.EnumerateDirectories(Path.GetTempPath(), TemporaryAttachmentPrefix + "*")) SecureDeleteDirectory(folder);
+                string oldFolder = Path.Combine(Path.GetTempPath(), "SaudiPatientRecordsView"); if (Directory.Exists(oldFolder)) SecureDeleteDirectory(oldFolder);
+            }
+            catch { }
+        }
+        public static void TryRestrictFileToCurrentUser(string path)
+        {
+            try
+            {
+                SecurityIdentifier sid = WindowsIdentity.GetCurrent().User; if (sid == null) return;
+                var rules = new FileSecurity(); rules.SetOwner(sid); rules.SetAccessRuleProtection(true, false); rules.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.FullControl, AccessControlType.Allow));
+                new FileInfo(path).SetAccessControl(rules);
+            }
+            catch { }
+        }
+        private static void EnsurePrivateDirectory(string path)
+        {
+            Directory.CreateDirectory(path);
+            try
+            {
+                SecurityIdentifier sid = WindowsIdentity.GetCurrent().User; if (sid == null) return;
+                var rules = new DirectorySecurity(); rules.SetOwner(sid); rules.SetAccessRuleProtection(true, false); rules.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.FullControl, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
+                new DirectoryInfo(path).SetAccessControl(rules);
+            }
+            catch { }
+        }
+        private static void TryMarkTemporary(string path) { try { File.SetAttributes(path, File.GetAttributes(path) | FileAttributes.Temporary | FileAttributes.NotContentIndexed); } catch { } }
+        private static void SecureDeleteDirectory(string folder)
+        {
+            try { foreach (string file in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories)) SecureDeleteFile(file); Directory.Delete(folder, true); } catch { }
+        }
+        private static void SecureDeleteFile(string path)
+        {
+            try
+            {
+                if (!File.Exists(path)) return; long length = new FileInfo(path).Length;
+                using (var stream = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.None)) { byte[] zeros = new byte[81920]; long remaining = length; while (remaining > 0) { int count = (int)Math.Min(zeros.Length, remaining); stream.Write(zeros, 0, count); remaining -= count; } stream.Flush(true); }
+                File.SetAttributes(path, FileAttributes.Normal); File.Delete(path);
+            }
+            catch { try { if (File.Exists(path)) File.Delete(path); } catch { } }
         }
         private static void ValidateAttachmentSignature(string path, string extension)
         {
@@ -378,12 +437,13 @@ namespace PatientRecordsSaudi.Services
         public void Checkpoint() { if (db != null) db.Checkpoint(); }
         public void ValidateDatabaseFile(string path)
         {
-            using (var test = new LiteDatabase(new ConnectionString { Filename = path, Password = databasePassword, Connection = ConnectionType.Direct, ReadOnly = true }))
+            using (var test = new LiteDatabase(new ConnectionString { Filename = path, Password = MaterializeDatabasePassword(), Connection = ConnectionType.Direct, ReadOnly = true }))
                 if (test.GetCollection<AppSettings>("settings").FindById(1) == null) throw new InvalidDataException("قاعدة بيانات النسخة لا تحتوي إعدادات النظام.");
         }
+        private string MaterializeDatabasePassword() { if (databasePasswordBytes == null) throw new ObjectDisposedException(nameof(AppDatabase)); return Encoding.UTF8.GetString(databasePasswordBytes); }
         public void Close() { if (db != null) { db.Checkpoint(); db.Dispose(); db = null; } }
         public void Reopen() { if (db == null) Open(); }
-        public void Dispose() { Close(); }
+        public void Dispose() { Close(); if (databasePasswordBytes != null) { CryptographicOperations.ZeroMemory(databasePasswordBytes); databasePasswordBytes = null; } }
     }
 
     public sealed class DuplicatePatientException : Exception { public Patient ExistingPatient { get; private set; } public DuplicatePatientException(Patient p) : base("قد يكون المراجع مسجلًا مسبقًا في الملف رقم " + p.FileNumber + ".") { ExistingPatient = p; } }

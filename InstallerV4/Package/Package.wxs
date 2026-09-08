@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Id="MohammedMousaAsiri.SaudiPatientRecords"
+           Name="نظام إدارة سجلات المراجعين"
+           Manufacturer="Mohammed Mousa Asiri"
+           Version="4.1.0"
+           Language="1025"
+           Scope="perUser"
+           InstallerVersion="500"
+           Compressed="yes">
+
+    <SummaryInformation Description="Saudi Patient Records personal desktop application" Manufacturer="Mohammed Mousa Asiri" />
+    <MediaTemplate EmbedCab="yes" />
+    <MajorUpgrade DowngradeErrorMessage="توجد نسخة أحدث من البرنامج مثبتة على هذا الجهاز." />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="LocalProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="Saudi Patient Records">
+          <Component Id="ApplicationComponent" Guid="*" Bitness="always64">
+            <File Id="ApplicationFile" Source="$(var.PublishDir)\SaudiPatientRecords.exe" KeyPath="yes">
+              <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="سجلات المراجعين" Description="نظام إدارة سجلات المراجعين" WorkingDirectory="INSTALLFOLDER" Advertise="no" />
+              <Shortcut Id="DesktopShortcut" Directory="DesktopFolder" Name="سجلات المراجعين" Description="نظام إدارة سجلات المراجعين" WorkingDirectory="INSTALLFOLDER" Advertise="no" />
+            </File>
+            <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
+          </Component>
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="Complete" Title="نظام إدارة سجلات المراجعين" Level="1">
+      <ComponentRef Id="ApplicationComponent" />
+    </Feature>
+
+    <Property Id="ARPCONTACT" Value="Mohammed Mousa Asiri" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/solarygold0-coder/-" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="اكتمل تثبيت البرنامج. افتحه من سطح المكتب أو قائمة ابدأ." />
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <UIRef Id="WixUI_ErrorProgressText" />
+  </Package>
+</Wix>

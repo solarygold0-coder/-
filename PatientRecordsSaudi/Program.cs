@@ -47,12 +47,16 @@ namespace PatientRecordsSaudi
                 try
                 {
                     var security = new AppSecurity(DataDirectory);
-                    using (var login = new LoginForm(security, null))
+                    bool defaultCreated = security.EnsureDefaultConfiguration();
+                    using (var login = new LoginForm(security, null, defaultCreated))
                     {
                         if (login.ShowDialog() != DialogResult.OK) return;
-                        using (var database = new AppDatabase(DataDirectory, login.Session.DatabasePassword, login.Session.DisplayName, login.Session.Role))
+                        using (login.Session)
+                        using (var database = new AppDatabase(DataDirectory, login.Session.MaterializeDatabasePassword(), login.Session.DisplayName, login.Session.Role))
                         {
                             security.FlushPendingAudit(database);
+                            if (login.Session.UsesDefaultCredentials)
+                                MessageBox.Show("أنت تستخدم بيانات الدخول الافتراضية admin / admin. غيّر كلمة المرور الآن من الإعدادات لحماية سجلات المراجعين.", "تنبيه أمني مهم", MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
                             Application.Run(new MainForm(database, new BackupService(DataDirectory), security, login.Session));
                         }
                     }
@@ -75,8 +79,9 @@ namespace PatientRecordsSaudi
             {
                 Directory.CreateDirectory(folder);
                 var security = new AppSecurity(folder);
-                SecuritySession session = security.Configure("فحص التشغيل", "Standalone!2026");
-                using (var database = new AppDatabase(folder, session.DatabasePassword, session.DisplayName, session.Role))
+                SecuritySession session = security.Configure("فحص التشغيل", "test1234");
+                using (session)
+                using (var database = new AppDatabase(folder, session.MaterializeDatabasePassword(), session.DisplayName, session.Role))
                 {
                     security.FlushPendingAudit(database);
                     if (database.CountActivePatients() != 0 || database.GetSettings().NextFileNumber != 1) return 2;
@@ -99,8 +104,7 @@ namespace PatientRecordsSaudi
             try
             {
                 string type = exception == null ? "Unknown" : exception.GetType().FullName;
-                string stack = exception == null ? "" : exception.StackTrace ?? "";
-                string entry = DateTime.UtcNow.ToString("O") + " | " + area + " | " + type + Environment.NewLine + stack + Environment.NewLine + Environment.NewLine;
+                string entry = DateTime.UtcNow.ToString("O") + " | " + area + " | " + type + Environment.NewLine;
                 File.AppendAllText(Path.Combine(DataDirectory, "errors.log"), entry);
             }
             catch { }

@@ -100,6 +100,7 @@ namespace PatientRecordsSaudi.Models
         [BsonId] public int Id { get; set; }
         public long NextFileNumber { get; set; }
         public int LastInventoryAlertYear { get; set; }
+        public bool SecurityNoticeShown { get; set; }
         public string ClinicName { get; set; }
         public string ClinicPhone { get; set; }
         public string ClinicAddress { get; set; }

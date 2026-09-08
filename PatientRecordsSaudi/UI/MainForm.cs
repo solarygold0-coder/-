@@ -40,7 +40,7 @@ namespace PatientRecordsSaudi.UI
             BuildHeader(); BuildTabs(); ConfigureNotification(); LoadAll();
             Application.AddMessageFilter(activity); idleTimer.Interval = 30000; idleTimer.Tick += delegate { if (!locked && DateTime.Now - activity.LastActivity > TimeSpan.FromMinutes(15)) LockApplication(); }; idleTimer.Start();
             maintenanceTimer.Interval = 15 * 60 * 1000; maintenanceTimer.Tick += delegate { RunScheduledBackup(false); }; maintenanceTimer.Start();
-            Shown += delegate { AnnualInventoryAlert(); RunScheduledBackup(false); CheckReminders(); }; FormClosing += OnClosing;
+            Shown += delegate { ShowSecurityHardeningNotice(); AnnualInventoryAlert(); RunScheduledBackup(false); CheckReminders(); }; FormClosing += OnClosing;
         }
 
         private void BuildHeader()
@@ -310,10 +310,11 @@ namespace PatientRecordsSaudi.UI
         }
         private void ExportCsv(object s, EventArgs e)
         {
+            if (!session.IsAdmin) { UiKit.ShowError("تصدير البيانات متاح للمدير فقط."); return; }
             if (!UiKit.Confirm("سيحتوي ملف CSV على بيانات شخصية حساسة وغير مشفرة. احفظه في مكان آمن. هل تريد المتابعة؟", "تحذير خصوصية")) return;
             using (var save = new SaveFileDialog { Filter = "CSV (*.csv)|*.csv", FileName = "قائمة_المراجعين_" + DateTime.Today.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + ".csv" }) if (save.ShowDialog(this) == DialogResult.OK)
             {
-                try { var sb = new StringBuilder(); sb.AppendLine("رقم الملف,الاسم,الهوية أو الإقامة,الجوال,المدينة,الحالة"); foreach (Patient p in database.GetAllPatients(true)) sb.AppendLine(Csv(p.FileNumber.ToString()) + "," + Csv(p.FullName) + "," + Csv(p.NationalId) + "," + Csv(p.Mobile) + "," + Csv(p.City) + "," + Csv(p.StatusText)); File.WriteAllText(save.FileName, sb.ToString(), new UTF8Encoding(true)); database.Audit("تصدير قائمة المراجعين", "Export", Path.GetFileName(save.FileName), null, "CSV"); database.Checkpoint(); MessageBox.Show("تم التصدير.", "تم", MessageBoxButtons.OK, MessageBoxIcon.Information); }
+                try { var sb = new StringBuilder(); sb.AppendLine("رقم الملف,الاسم,الهوية أو الإقامة,الجوال,المدينة,الحالة"); foreach (Patient p in database.GetAllPatients(true)) sb.AppendLine(Csv(p.FileNumber.ToString()) + "," + Csv(p.FullName) + "," + Csv(p.NationalId) + "," + Csv(p.Mobile) + "," + Csv(p.City) + "," + Csv(p.StatusText)); File.WriteAllText(save.FileName, sb.ToString(), new UTF8Encoding(true)); AppDatabase.TryRestrictFileToCurrentUser(save.FileName); database.Audit("تصدير قائمة المراجعين", "Export", Path.GetFileName(save.FileName), null, "CSV"); database.Checkpoint(); MessageBox.Show("تم التصدير.", "تم", MessageBoxButtons.OK, MessageBoxIcon.Information); }
                 catch (Exception ex) { UiKit.ShowError(ex.Message); }
             }
         }
@@ -325,22 +326,30 @@ namespace PatientRecordsSaudi.UI
             var rows = appointmentGrid.DataSource as BindingList<Appointment>; if (rows == null || rows.Count == 0) { UiKit.ShowError("لا توجد مواعيد ظاهرة للتصدير."); return; }
             using (var save = new SaveFileDialog { Filter = "CSV (*.csv)|*.csv", FileName = "المواعيد_" + DateTime.Today.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + ".csv" }) if (save.ShowDialog(this) == DialogResult.OK)
             {
-                try { var sb = new StringBuilder(); sb.AppendLine("رقم الملف,اسم المراجع,العنوان,نوع الزيارة,التاريخ,الوقت,المدة,الحالة,الملاحظات"); foreach (Appointment a in rows) sb.AppendLine(Csv(a.FileNumber.ToString()) + "," + Csv(a.PatientName) + "," + Csv(a.Title) + "," + Csv(a.VisitType) + "," + Csv(a.StartsAt.ToString("yyyy/MM/dd")) + "," + Csv(a.TimeText) + "," + Csv(a.DurationMinutes.ToString()) + "," + Csv(a.Status) + "," + Csv(a.Notes)); File.WriteAllText(save.FileName, sb.ToString(), new UTF8Encoding(true)); database.Audit("تصدير المواعيد", "Export", Path.GetFileName(save.FileName), null, "الصفوف: " + rows.Count); database.Checkpoint(); MessageBox.Show("تم تصدير المواعيد الظاهرة.", "تم", MessageBoxButtons.OK, MessageBoxIcon.Information); }
+                try { var sb = new StringBuilder(); sb.AppendLine("رقم الملف,اسم المراجع,العنوان,نوع الزيارة,التاريخ,الوقت,المدة,الحالة,الملاحظات"); foreach (Appointment a in rows) sb.AppendLine(Csv(a.FileNumber.ToString()) + "," + Csv(a.PatientName) + "," + Csv(a.Title) + "," + Csv(a.VisitType) + "," + Csv(a.StartsAt.ToString("yyyy/MM/dd")) + "," + Csv(a.TimeText) + "," + Csv(a.DurationMinutes.ToString()) + "," + Csv(a.Status) + "," + Csv(a.Notes)); File.WriteAllText(save.FileName, sb.ToString(), new UTF8Encoding(true)); AppDatabase.TryRestrictFileToCurrentUser(save.FileName); database.Audit("تصدير المواعيد", "Export", Path.GetFileName(save.FileName), null, "الصفوف: " + rows.Count); database.Checkpoint(); MessageBox.Show("تم تصدير المواعيد الظاهرة.", "تم", MessageBoxButtons.OK, MessageBoxIcon.Information); }
                 catch (Exception ex) { UiKit.ShowError(ex.Message); }
             }
         }
         private void ExportAuditCsv(object sender, EventArgs e)
         {
+            if (!session.IsAdmin) { UiKit.ShowError("تصدير البيانات متاح للمدير فقط."); return; }
             if (!UiKit.Confirm("سجل العمليات قد يحتوي بيانات شخصية وغير مشفرة. هل تريد المتابعة؟", "تحذير خصوصية")) return;
             using (var save = new SaveFileDialog { Filter = "CSV (*.csv)|*.csv", FileName = "سجل_العمليات_" + DateTime.Today.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + ".csv" }) if (save.ShowDialog(this) == DialogResult.OK)
             {
-                try { var sb = new StringBuilder(); sb.AppendLine("الوقت,الموظف,العملية,نوع السجل,رقم الملف,التفاصيل,الجهاز"); foreach (AuditEntry a in database.GetAllAudit()) sb.AppendLine(Csv(a.OccurredAt.ToString("yyyy/MM/dd HH:mm:ss")) + "," + Csv(a.UserName) + "," + Csv(a.Action) + "," + Csv(a.EntityType) + "," + Csv(a.FileNumber.HasValue ? a.FileNumber.Value.ToString() : "") + "," + Csv(a.Details) + "," + Csv(a.MachineName)); File.WriteAllText(save.FileName, sb.ToString(), new UTF8Encoding(true)); database.Audit("تصدير سجل العمليات", "Export", Path.GetFileName(save.FileName), null, "تصدير كامل"); database.Checkpoint(); MessageBox.Show("تم تصدير سجل العمليات كاملًا.", "تم", MessageBoxButtons.OK, MessageBoxIcon.Information); }
+                try { var sb = new StringBuilder(); sb.AppendLine("الوقت,الموظف,العملية,نوع السجل,رقم الملف,التفاصيل,الجهاز"); foreach (AuditEntry a in database.GetAllAudit()) sb.AppendLine(Csv(a.OccurredAt.ToString("yyyy/MM/dd HH:mm:ss")) + "," + Csv(a.UserName) + "," + Csv(a.Action) + "," + Csv(a.EntityType) + "," + Csv(a.FileNumber.HasValue ? a.FileNumber.Value.ToString() : "") + "," + Csv(a.Details) + "," + Csv(a.MachineName)); File.WriteAllText(save.FileName, sb.ToString(), new UTF8Encoding(true)); AppDatabase.TryRestrictFileToCurrentUser(save.FileName); database.Audit("تصدير سجل العمليات", "Export", Path.GetFileName(save.FileName), null, "تصدير كامل"); database.Checkpoint(); MessageBox.Show("تم تصدير سجل العمليات كاملًا.", "تم", MessageBoxButtons.OK, MessageBoxIcon.Information); }
                 catch (Exception ex) { UiKit.ShowError(ex.Message); }
             }
         }
 
         private void ManageUsers(object sender, EventArgs e) { using (var f = new UserManagementForm(security, session)) f.ShowDialog(this); }
         private void ChangePassword(object sender, EventArgs e) { using (var f = new ChangePasswordDialog(security, session)) f.ShowDialog(this); }
+        private void ShowSecurityHardeningNotice()
+        {
+            if (!session.IsAdmin) return;
+            AppSettings settings = database.GetSettings(); if (settings.SecurityNoticeShown) return;
+            MessageBox.Show("لحماية بيانات المراجعين: فعّل تشفير BitLocker على قرص Windows، امنع وصول غير المخولين إلى الجهاز، استخدم حسابًا مستقلًا لكل موظف، واحفظ النسخ الاحتياطية في موقع مشفر وآمن.", "إعدادات حماية موصى بها", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
+            settings.SecurityNoticeShown = true; database.SaveSettings(settings);
+        }
         private void ManageClosures(object sender, EventArgs e) { using (var f = new ClosureDatesForm(database)) f.ShowDialog(this); }
         private void OpenRecycleBin(object sender, EventArgs e) { using (var f = new RecycleBinForm(database)) f.ShowDialog(this); LoadAll(); }
         private void ShowAudit(object sender, EventArgs e)
@@ -442,7 +451,7 @@ namespace PatientRecordsSaudi.UI
         private void LockApplication() { if (locked) return; locked = true; if (activeReminder != null && !activeReminder.IsDisposed) activeReminder.Close(); Hide(); notify.BalloonTipTitle = "تم قفل البرنامج"; notify.BalloonTipText = "تم القفل تلقائيًا لحماية البيانات. انقر لفتح البرنامج."; notify.ShowBalloonTip(5000); }
         private bool UnlockAndShow()
         {
-            if (locked) { using (var login = new LoginForm(security, session.Username)) { if (login.ShowDialog() != DialogResult.OK) return false; session = login.Session; database.SetCurrentSession(session.DisplayName, session.Role); security.FlushPendingAudit(database); locked = false; activity.Touch(); } }
+            if (locked) { using (var login = new LoginForm(security, session.Username)) { if (login.ShowDialog() != DialogResult.OK) return false; SecuritySession previous = session; session = login.Session; previous.Dispose(); database.SetCurrentSession(session.DisplayName, session.Role); security.FlushPendingAudit(database); locked = false; activity.Touch(); } }
             Show(); WindowState = FormWindowState.Maximized; Activate(); CheckReminders(); return true;
         }
 
@@ -457,7 +466,7 @@ namespace PatientRecordsSaudi.UI
         private void OnClosing(object sender, FormClosingEventArgs e)
         {
             if (!forceExit && e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; locked = true; if (activeReminder != null && !activeReminder.IsDisposed) activeReminder.Close(); Hide(); notify.BalloonTipTitle = "البرنامج يعمل في الخلفية"; notify.BalloonTipText = "ستستمر تنبيهات المواعيد والمهام. استخدم أيقونة البرنامج بجانب الساعة للفتح أو الإنهاء."; notify.ShowBalloonTip(7000); return; }
-            reminderTimer.Stop(); maintenanceTimer.Stop(); idleTimer.Stop(); if (lockedReminder != null && !lockedReminder.IsDisposed) lockedReminder.Close(); try { RunScheduledBackup(true); } catch { } AppDatabase.CleanupTemporaryAttachments(); Application.RemoveMessageFilter(activity); notify.Visible = false; notify.Dispose();
+            reminderTimer.Stop(); maintenanceTimer.Stop(); idleTimer.Stop(); if (lockedReminder != null && !lockedReminder.IsDisposed) lockedReminder.Close(); try { RunScheduledBackup(true); } catch { } AppDatabase.CleanupTemporaryAttachments(); Application.RemoveMessageFilter(activity); notify.Visible = false; notify.Dispose(); session.Dispose();
         }
 
         private sealed class InactivityFilter : IMessageFilter

@@ -1,0 +1,32 @@
+name: Windows interactive installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build, test, install, launch-test and uninstall
+        shell: pwsh
+        run: .\build-installer.ps1
+      - name: Create source archive
+        shell: pwsh
+        run: git archive --format=zip --output=release-installer/SaudiPatientRecords-Source-v4.1.0.zip HEAD
+      - name: Upload installer deliverables
+        uses: actions/upload-artifact@v4
+        with:
+          name: Saudi-Patient-Records-v4.1.0
+          path: release-installer/*
+          if-no-files-found: error
+          retention-days: 14

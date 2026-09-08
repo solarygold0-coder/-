@@ -117,7 +117,7 @@ namespace PatientRecordsSaudi.UI
         private void OpenAttachment(object sender, EventArgs e)
         {
             PatientAttachment a = SelectedAttachment(); if (a == null) { UiKit.ShowError("اختر مرفقًا أولًا."); return; } if (a.IsDeleted) { UiKit.ShowError("استعد المرفق أولًا قبل فتحه."); return; }
-            try { string path = database.ExportAttachmentToTemporaryFile(a.Id); Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); }
+            try { string path = database.ExportAttachmentToTemporaryFile(a.Id); Process viewer = Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); AppDatabase.ScheduleTemporaryAttachmentCleanup(path, viewer); }
             catch (Exception ex) { UiKit.ShowError("تعذر فتح المرفق: " + ex.Message); }
         }
         private void DeleteAttachment(object sender, EventArgs e) { PatientAttachment a = SelectedAttachment(); if (a != null && !a.IsDeleted && UiKit.Confirm("نقل المرفق «" + a.OriginalName + "» إلى المحذوفات؟", "تأكيد")) { database.DeleteAttachment(a.Id); LoadAttachments(); } }

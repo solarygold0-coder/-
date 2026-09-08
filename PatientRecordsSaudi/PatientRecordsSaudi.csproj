@@ -5,7 +5,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>PatientRecordsSaudi</RootNamespace>
     <AssemblyName>SaudiPatientRecords</AssemblyName>
-    <Nullable>disable</Nullable>
+    <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <LangVersion>14.0</LangVersion>
     <Platforms>x64</Platforms>
@@ -23,9 +23,9 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
-    <Version>4.0.0</Version>
-    <FileVersion>4.0.0.0</FileVersion>
-    <AssemblyVersion>4.0.0.0</AssemblyVersion>
+    <Version>4.1.0</Version>
+    <FileVersion>4.1.0.0</FileVersion>
+    <AssemblyVersion>4.1.0.0</AssemblyVersion>
     <Company>Mohammed Mousa Asiri</Company>
     <Product>Saudi Patient Records</Product>
     <Copyright>Copyright © Mohammed Mousa Asiri 2026</Copyright>
