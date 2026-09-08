@@ -26,6 +26,7 @@ namespace PatientRecordsSaudi.UI
         private readonly ComboBox workStart = UiKit.Combo("06:00", "07:00", "08:00", "09:00", "10:00"), workEnd = UiKit.Combo("14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00"), backupHours = UiKit.Combo("1", "2", "4", "6", "8", "12", "24");
         private readonly Label backupStatus = new Label { AutoSize = true, Font = UiKit.BoldFont, ForeColor = Color.DimGray, Margin = new Padding(8, 12, 8, 8) };
         private readonly Label clinicLogoStatus = new Label { AutoSize = true, Font = UiKit.NormalFont, ForeColor = Color.DimGray, Margin = new Padding(8, 12, 8, 8) };
+        private readonly CheckBox requireLogin = new CheckBox { Text = "طلب تسجيل الدخول عند التشغيل (تُطبّق صلاحية كل حساب: مدير/موظف/قراءة فقط)", AutoSize = true, Font = UiKit.BoldFont, Margin = new Padding(8, 12, 8, 8) };
         private readonly CheckBox showArchived = new CheckBox { Text = "إظهار المؤرشفين", AutoSize = true, Font = UiKit.NormalFont, Margin = new Padding(10, 12, 10, 5) }, showCompleted = new CheckBox { Text = "إظهار المكتملة", AutoSize = true, Font = UiKit.NormalFont, Margin = new Padding(10, 12, 10, 5) };
         private readonly Label patientCount = DashboardNumber(), todayCount = DashboardNumber(), upcomingCount = DashboardNumber(), taskCount = DashboardNumber(), inventoryCount = DashboardNumber();
         private readonly NotifyIcon notify = new NotifyIcon(); private readonly Timer reminderTimer = new Timer(), maintenanceTimer = new Timer(), idleTimer = new Timer();
@@ -38,7 +39,7 @@ namespace PatientRecordsSaudi.UI
             RightToLeft = RightToLeft.Yes; RightToLeftLayout = true; Font = UiKit.NormalFont; BackColor = UiKit.Background;
             StartPosition = FormStartPosition.CenterScreen; WindowState = FormWindowState.Maximized; MinimumSize = new Size(1024, 700); FormBorderStyle = FormBorderStyle.Sizable;
             BuildHeader(); BuildTabs(); ConfigureNotification(); LoadAll();
-            Application.AddMessageFilter(activity); idleTimer.Interval = 30000; idleTimer.Tick += delegate { if (!locked && DateTime.Now - activity.LastActivity > TimeSpan.FromMinutes(15)) LockApplication(); }; idleTimer.Start();
+            Application.AddMessageFilter(activity); idleTimer.Interval = 30000; idleTimer.Tick += delegate { if (security.IsLoginRequired && !locked && DateTime.Now - activity.LastActivity > TimeSpan.FromMinutes(15)) LockApplication(); }; idleTimer.Start();
             maintenanceTimer.Interval = 15 * 60 * 1000; maintenanceTimer.Tick += delegate { RunScheduledBackup(false); }; maintenanceTimer.Start();
             Shown += delegate { ShowSecurityHardeningNotice(); AnnualInventoryAlert(); RunScheduledBackup(false); CheckReminders(); }; FormClosing += OnClosing;
         }
@@ -117,7 +118,7 @@ namespace PatientRecordsSaudi.UI
             var tab = NewTab("الإعدادات والنسخ الاحتياطي"); tab.AutoScroll = true;
             var body = new TableLayoutPanel { Dock = DockStyle.Top, Padding = new Padding(28), ColumnCount = 2, AutoSize = true };
             body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25)); body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 75));
-            AddSetting(body, "اسم المنشأة", clinicName); AddSetting(body, "هاتف المنشأة", clinicPhone); AddSetting(body, "عنوان المنشأة", clinicAddress); AddSetting(body, "بداية الدوام", workStart); AddSetting(body, "نهاية الدوام", workEnd); AddSetting(body, "نسخة تلقائية كل (ساعة)", backupHours);
+            AddSetting(body, "اسم المنشأة", clinicName); AddSetting(body, "هاتف المنشأة", clinicPhone); AddSetting(body, "عنوان المنشأة", clinicAddress); AddSetting(body, "بداية الدوام", workStart); AddSetting(body, "نهاية الدوام", workEnd); AddSetting(body, "نسخة تلقائية كل (ساعة)", backupHours); AddSetting(body, "حماية تسجيل الدخول", requireLogin);
             var backupLocation = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.RightToLeft }; autoBackupDirectory.Width = 500; autoBackupDirectory.ReadOnly = true; Button chooseBackupDirectory = UiKit.Button("اختيار مجلد خارجي", ChooseAutoBackupDirectory, false); chooseBackupDirectory.Enabled = session.IsAdmin; backupLocation.Controls.Add(chooseBackupDirectory); backupLocation.Controls.Add(autoBackupDirectory); AddSetting(body, "مجلد النسخ التلقائي", backupLocation);
             var logoActions = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.RightToLeft }; Button chooseLogo = UiKit.Button("اختيار شعار", ChooseClinicLogo, false), removeLogo = UiKit.Button("إزالة الشعار", RemoveClinicLogo, true); chooseLogo.Enabled = removeLogo.Enabled = session.IsAdmin; logoActions.Controls.Add(chooseLogo); logoActions.Controls.Add(removeLogo); logoActions.Controls.Add(clinicLogoStatus); AddSetting(body, "شعار الطباعة", logoActions);
             ConfigureLookupText(visitTypesText); ConfigureLookupText(appointmentStatusesText); ConfigureLookupText(taskPrioritiesText); ConfigureLookupText(genderOptionsText); ConfigureLookupText(bloodTypesText);
@@ -129,7 +130,7 @@ namespace PatientRecordsSaudi.UI
             int r = body.RowCount++; body.Controls.Add(new Label(), 0, r); body.Controls.Add(actions, 1, r);
             var privacy = new Label { Text = "تنبيه خصوصية: البيانات الصحية حساسة. قاعدة البيانات مشفرة، والنسخ الاحتياطية تحتوي بيانات مشفرة. امنع مشاركة كلمة المرور أو ملفات النسخ مع غير المخولين.", AutoSize = true, MaximumSize = new Size(850, 0), Font = UiKit.BoldFont, ForeColor = UiKit.Danger, Margin = new Padding(8, 24, 8, 8) };
             r = body.RowCount++; body.Controls.Add(new Label(), 0, r); body.Controls.Add(privacy, 1, r); r = body.RowCount++; body.Controls.Add(new Label(), 0, r); body.Controls.Add(backupStatus, 1, r); tab.Controls.Add(body);
-            AppSettings s = database.GetSettings(); clinicName.Text = s.ClinicName; clinicPhone.Text = s.ClinicPhone; clinicAddress.Text = s.ClinicAddress; workStart.SelectedItem = MinutesText(s.WorkDayStartMinutes); workEnd.SelectedItem = MinutesText(s.WorkDayEndMinutes); backupHours.SelectedItem = s.BackupIntervalHours.ToString(); autoBackupDirectory.Text = string.IsNullOrWhiteSpace(s.AutoBackupDirectory) ? "داخل الجهاز (اختر قرصًا خارجيًا للحماية من تعطل القرص)" : s.AutoBackupDirectory;
+            AppSettings s = database.GetSettings(); clinicName.Text = s.ClinicName; clinicPhone.Text = s.ClinicPhone; clinicAddress.Text = s.ClinicAddress; workStart.SelectedItem = MinutesText(s.WorkDayStartMinutes); workEnd.SelectedItem = MinutesText(s.WorkDayEndMinutes); backupHours.SelectedItem = s.BackupIntervalHours.ToString(); requireLogin.Checked = security.IsLoginRequired; requireLogin.Enabled = session.IsAdmin; autoBackupDirectory.Text = string.IsNullOrWhiteSpace(s.AutoBackupDirectory) ? "داخل الجهاز (اختر قرصًا خارجيًا للحماية من تعطل القرص)" : s.AutoBackupDirectory;
             visitTypesText.Lines = s.VisitTypes.ToArray(); appointmentStatusesText.Lines = s.AppointmentStatuses.ToArray(); taskPrioritiesText.Lines = s.TaskPriorities.ToArray(); genderOptionsText.Lines = s.GenderOptions.ToArray(); bloodTypesText.Lines = s.BloodTypes.ToArray(); clinicLogoStatus.Text = string.IsNullOrWhiteSpace(s.ClinicLogoStoredId) ? "لا يوجد شعار" : "الشعار الحالي: " + s.ClinicLogoFileName; backupStatus.Text = "حالة النسخ: " + s.LastBackupStatus;
             if (!session.IsAdmin) foreach (Control c in new Control[] { clinicName, clinicPhone, clinicAddress, workStart, workEnd, backupHours, visitTypesText, appointmentStatusesText, taskPrioritiesText, genderOptionsText, bloodTypesText }) c.Enabled = false; return tab;
         }
@@ -266,7 +267,9 @@ namespace PatientRecordsSaudi.UI
             {
                 AppSettings set = database.GetSettings(); set.ClinicName = clinicName.Text.Trim(); set.ClinicPhone = clinicPhone.Text.Trim(); set.ClinicAddress = clinicAddress.Text.Trim(); set.WorkDayStartMinutes = ParseMinutes(workStart.Text); set.WorkDayEndMinutes = ParseMinutes(workEnd.Text); int hours; if (!int.TryParse(backupHours.Text, out hours)) hours = 4; set.BackupIntervalHours = hours; set.AutoBackupDirectory = autoBackupDirectory.Text.StartsWith("داخل الجهاز", StringComparison.Ordinal) ? "" : autoBackupDirectory.Text.Trim();
                 set.VisitTypes = LookupLines(visitTypesText); set.AppointmentStatuses = LookupLines(appointmentStatusesText); set.TaskPriorities = LookupLines(taskPrioritiesText); set.GenderOptions = LookupLines(genderOptionsText); set.BloodTypes = LookupLines(bloodTypesText);
-                database.SaveSettings(set); Text = "نظام إدارة سجلات المراجعين - " + set.ClinicName; MessageBox.Show("تم حفظ الإعدادات.", "تم", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                database.SaveSettings(set); bool loginChanged = security.IsLoginRequired != requireLogin.Checked; security.SetLoginRequired(session, requireLogin.Checked); Text = "نظام إدارة سجلات المراجعين - " + set.ClinicName;
+                if (loginChanged && requireLogin.Checked) MessageBox.Show("تم تفعيل تسجيل الدخول. تأكد من معرفة بيانات حساب المدير؛ البيانات الافتراضية للتثبيت الجديد هي admin / admin ويمكن تغييرها من زر تغيير كلمة المرور.", "تم تفعيل الحماية", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
+                else MessageBox.Show("تم حفظ الإعدادات.", "تم", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex) { UiKit.ShowError(ex.Message); }
         }
@@ -462,7 +465,7 @@ namespace PatientRecordsSaudi.UI
             catch (Exception ex) { try { database.Audit("خطأ في نافذة التنبيهات", "System", "reminders", null, ex.Message); database.Checkpoint(); } catch { } }
         }
 
-        private void LockApplication() { if (locked) return; locked = true; if (activeReminder != null && !activeReminder.IsDisposed) activeReminder.Close(); Hide(); notify.BalloonTipTitle = "تم قفل البرنامج"; notify.BalloonTipText = "تم القفل تلقائيًا لحماية البيانات. انقر لفتح البرنامج."; notify.ShowBalloonTip(5000); }
+        private void LockApplication() { if (!security.IsLoginRequired || locked) return; locked = true; if (activeReminder != null && !activeReminder.IsDisposed) activeReminder.Close(); Hide(); notify.BalloonTipTitle = "تم قفل البرنامج"; notify.BalloonTipText = "تم القفل تلقائيًا لحماية البيانات. انقر لفتح البرنامج."; notify.ShowBalloonTip(5000); }
         private bool UnlockAndShow()
         {
             if (locked) { using (var login = new LoginForm(security, session.Username)) { if (login.ShowDialog() != DialogResult.OK) return false; SecuritySession previous = session; session = login.Session; previous.Dispose(); database.SetCurrentSession(session.DisplayName, session.Role); security.FlushPendingAudit(database); locked = false; activity.Touch(); } }
@@ -471,6 +474,7 @@ namespace PatientRecordsSaudi.UI
 
         private void RunScheduledBackup(bool force)
         {
+            if (!session.IsAdmin) return;
             AppSettings s = database.GetSettings(); if (!force && s.LastAutoBackupAt.HasValue && DateTime.Now - s.LastAutoBackupAt.Value < TimeSpan.FromHours(s.BackupIntervalHours)) return;
             try { string folder = string.IsNullOrWhiteSpace(s.AutoBackupDirectory) ? Path.Combine(database.DataDirectory, "AutoBackups") : s.AutoBackupDirectory; string path = backups.CreateBackup(folder, database); UpdateBackupStatus("نجحت في " + DateTime.Now.ToString("yyyy/MM/dd HH:mm") + " — " + Path.GetFileName(path), DateTime.Now); PruneBackups(folder); if (force) { notify.BalloonTipTitle = "النسخ الاحتياطي"; notify.BalloonTipText = "تم إنشاء النسخة بنجاح."; notify.ShowBalloonTip(5000); } }
             catch (Exception ex) { try { UpdateBackupStatus("فشلت: " + ex.Message, null); } catch { } notify.BalloonTipTitle = "فشل النسخ الاحتياطي"; notify.BalloonTipText = "افتح البرنامج لمراجعة حالة النسخ."; notify.ShowBalloonTip(8000); }
@@ -479,7 +483,7 @@ namespace PatientRecordsSaudi.UI
         private static void PruneBackups(string folder) { foreach (FileInfo f in new DirectoryInfo(folder).GetFiles("*.zip").OrderByDescending(x => x.CreationTimeUtc).Skip(30)) f.Delete(); }
         private void OnClosing(object sender, FormClosingEventArgs e)
         {
-            if (!forceExit && e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; locked = true; if (activeReminder != null && !activeReminder.IsDisposed) activeReminder.Close(); Hide(); notify.BalloonTipTitle = "البرنامج يعمل في الخلفية"; notify.BalloonTipText = "ستستمر تنبيهات المواعيد والمهام. استخدم أيقونة البرنامج بجانب الساعة للفتح أو الإنهاء."; notify.ShowBalloonTip(7000); return; }
+            if (!forceExit && e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; locked = security.IsLoginRequired; if (activeReminder != null && !activeReminder.IsDisposed) activeReminder.Close(); Hide(); notify.BalloonTipTitle = "البرنامج يعمل في الخلفية"; notify.BalloonTipText = "ستستمر تنبيهات المواعيد والمهام. استخدم أيقونة البرنامج بجانب الساعة للفتح أو الإنهاء."; notify.ShowBalloonTip(7000); return; }
             reminderTimer.Stop(); maintenanceTimer.Stop(); idleTimer.Stop(); if (lockedReminder != null && !lockedReminder.IsDisposed) lockedReminder.Close(); try { RunScheduledBackup(true); } catch { } AppDatabase.CleanupTemporaryAttachments(); Application.RemoveMessageFilter(activity); notify.Visible = false; notify.Dispose(); session.Dispose();
         }
 

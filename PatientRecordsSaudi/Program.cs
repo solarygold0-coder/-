@@ -61,17 +61,25 @@ namespace PatientRecordsSaudi
                 {
                     var security = new AppSecurity(DataDirectory);
                     bool defaultCreated = security.EnsureDefaultConfiguration();
-                    using (var login = new LoginForm(security, null, defaultCreated))
+                    SecuritySession activeSession = null;
+                    if (!security.IsLoginRequired)
                     {
-                        if (login.ShowDialog() != DialogResult.OK) return;
-                        using (login.Session)
-                        using (var database = new AppDatabase(DataDirectory, login.Session.MaterializeDatabasePassword(), login.Session.DisplayName, login.Session.Role))
+                        try { activeSession = security.OpenWithoutLogin(); }
+                        catch (UnauthorizedAccessException)
                         {
-                            security.FlushPendingAudit(database);
-                            if (login.Session.UsesDefaultCredentials)
-                                MessageBox.Show("أنت تستخدم بيانات الدخول الافتراضية admin / admin. غيّر كلمة المرور الآن من الإعدادات لحماية سجلات المراجعين.", "تنبيه أمني مهم", MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
-                            Application.Run(new MainForm(database, new BackupService(DataDirectory), security, login.Session));
+                            using (var migrationLogin = new LoginForm(security, null, false)) { if (migrationLogin.ShowDialog() != DialogResult.OK) return; activeSession = migrationLogin.Session; }
                         }
+                    }
+                    else using (var login = new LoginForm(security, null, defaultCreated)) { if (login.ShowDialog() != DialogResult.OK) return; activeSession = login.Session; }
+
+                    if (activeSession == null) return;
+                    using (activeSession)
+                    using (var database = new AppDatabase(DataDirectory, activeSession.MaterializeDatabasePassword(), activeSession.DisplayName, activeSession.Role))
+                    {
+                        security.FlushPendingAudit(database);
+                        if (security.IsLoginRequired && activeSession.UsesDefaultCredentials)
+                            MessageBox.Show("أنت تستخدم بيانات الدخول الافتراضية admin / admin. غيّر كلمة المرور الآن من الإعدادات لحماية سجلات المراجعين.", "تنبيه أمني مهم", MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
+                        Application.Run(new MainForm(database, new BackupService(DataDirectory), security, activeSession));
                     }
                 }
                 catch (Exception ex)
@@ -95,12 +103,17 @@ namespace PatientRecordsSaudi
                 MigrateLegacyDataOnce(legacyProbe, currentProbe); if (File.ReadAllText(Path.Combine(currentProbe, "migration.test")) != "ok" || !File.Exists(Path.Combine(currentProbe, ".generation-v2"))) return 4;
                 var security = new AppSecurity(folder);
                 if (!security.EnsureDefaultConfiguration()) return 3;
-                SecuritySession session = security.Login("admin", "admin");
+                if (security.IsLoginRequired) return 5;
+                SecuritySession session = security.OpenWithoutLogin();
                 using (session)
                 using (var database = new AppDatabase(folder, session.MaterializeDatabasePassword(), session.DisplayName, session.Role))
                 {
                     security.FlushPendingAudit(database);
-                    if (!session.IsAdmin || !session.UsesDefaultCredentials || database.CountActivePatients() != 0 || database.GetSettings().NextFileNumber != 1) return 2;
+                    if (!session.IsAdmin || database.CountActivePatients() != 0 || database.GetSettings().NextFileNumber != 1) return 2;
+                    security.SetLoginRequired(session, true); if (!security.IsLoginRequired) return 6;
+                    bool passwordlessBlocked = false; try { using (SecuritySession invalid = security.OpenWithoutLogin()) { } } catch (UnauthorizedAccessException) { passwordlessBlocked = true; } if (!passwordlessBlocked) return 7;
+                    using (SecuritySession authenticated = security.Login("admin", "admin")) if (!authenticated.IsAdmin) return 8;
+                    security.SetLoginRequired(session, false); using (SecuritySession reopened = security.OpenWithoutLogin()) if (!reopened.IsAdmin) return 9;
                     database.Checkpoint();
                 }
                 return 0;

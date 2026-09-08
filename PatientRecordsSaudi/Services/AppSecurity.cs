@@ -41,6 +41,7 @@ namespace PatientRecordsSaudi.Services
     {
         public SecurityStore() { }
         public int Version { get; set; }
+        public bool LoginRequired { get; set; }
         public List<SecurityUserRecord> Users { get; set; }
     }
 
@@ -70,14 +71,15 @@ namespace PatientRecordsSaudi.Services
     public sealed class AppSecurity
     {
         private const int Iterations = 180000;
-        private readonly string authPath, auditPath;
+        private readonly string authPath, auditPath, deviceKeyPath;
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true,
             WriteIndented = false
         };
-        public AppSecurity(string appDataPath) { authPath = Path.Combine(appDataPath, "auth.dat"); auditPath = Path.Combine(appDataPath, "security.audit"); TryDelete(authPath + ".bak"); TryDelete(authPath + ".legacy"); }
+        public AppSecurity(string appDataPath) { authPath = Path.Combine(appDataPath, "auth.dat"); auditPath = Path.Combine(appDataPath, "security.audit"); deviceKeyPath = Path.Combine(appDataPath, "database.key"); TryDelete(authPath + ".bak"); TryDelete(authPath + ".legacy"); TryDelete(deviceKeyPath + ".bak"); }
         public bool IsConfigured { get { return File.Exists(authPath); } }
+        public bool IsLoginRequired { get { return IsConfigured && (IsLegacyTwoLineFile() || LoadStore().LoginRequired); } }
 
         public bool EnsureDefaultConfiguration()
         {
@@ -85,9 +87,9 @@ namespace PatientRecordsSaudi.Services
             byte[] dbKey = RandomBytes(32);
             try
             {
-                var store = new SecurityStore { Version = 2, Users = new List<SecurityUserRecord>() };
+                var store = new SecurityStore { Version = 2, LoginRequired = false, Users = new List<SecurityUserRecord>() };
                 store.Users.Add(CreateRecord("admin", "مدير النظام", "مدير", "admin", Convert.ToBase64String(dbKey)));
-                SaveStore(store); TryLog("admin", "إعداد الحماية", "إنشاء الحساب الافتراضي؛ يلزم تغيير كلمة المرور");
+                SaveStore(store); SaveDeviceKey(Convert.ToBase64String(dbKey)); TryLog("admin", "إعداد الحماية", "إنشاء الحساب الافتراضي؛ تسجيل الدخول اختياري");
                 return true;
             }
             finally { CryptographicOperations.ZeroMemory(dbKey); }
@@ -98,10 +100,34 @@ namespace PatientRecordsSaudi.Services
             if (IsConfigured) throw new InvalidOperationException("تم إعداد الحماية مسبقًا.");
             ValidatePassword(password);
             byte[] dbKey = RandomBytes(32); string dbPassword = Convert.ToBase64String(dbKey);
-            var store = new SecurityStore { Version = 2, Users = new List<SecurityUserRecord>() };
+            var store = new SecurityStore { Version = 2, LoginRequired = false, Users = new List<SecurityUserRecord>() };
             store.Users.Add(CreateRecord("admin", CleanDisplayName(displayName), "مدير", password, dbPassword));
-            SaveStore(store); TryLog("admin", "إعداد الحماية", "إنشاء حساب المدير الأول");
+            SaveStore(store); SaveDeviceKey(dbPassword); TryLog("admin", "إعداد الحماية", "إنشاء حساب المدير الأول");
             return new SecuritySession { Username = "admin", DisplayName = CleanDisplayName(displayName), Role = "مدير", DatabaseKeyBytes = dbKey };
+        }
+
+        public SecuritySession OpenWithoutLogin()
+        {
+            if (!IsConfigured) throw new InvalidOperationException("لم يتم إعداد الحماية.");
+            if (IsLoginRequired) throw new UnauthorizedAccessException("تسجيل الدخول مطلوب في الإعدادات.");
+            SecurityStore store = LoadStore(); SecurityUserRecord admin = store.Users.FirstOrDefault(x => x.IsActive && x.Role == "مدير");
+            if (admin == null) throw new InvalidDataException("لا يوجد حساب مدير فعال.");
+            if (!File.Exists(deviceKeyPath))
+            {
+                try { return Login("admin", "admin"); }
+                catch (UnauthorizedAccessException) { throw new UnauthorizedAccessException("يلزم إدخال بيانات المدير مرة واحدة لترحيل قاعدة البيانات القديمة، ثم سيفتح البرنامج لاحقًا دون تسجيل دخول."); }
+            }
+            byte[] key;
+            try { key = ReadDeviceKey(); }
+            catch (InvalidDataException) { throw new UnauthorizedAccessException("يلزم إدخال بيانات المدير مرة واحدة لإعادة حماية مفتاح قاعدة البيانات لهذا المستخدم في Windows."); }
+            TryLog(admin.Username, "فتح بدون تسجيل دخول", "الحماية الاختيارية غير مفعلة");
+            return new SecuritySession { Username = admin.Username, DisplayName = admin.DisplayName, Role = "مدير", DatabaseKeyBytes = key, UsesDefaultCredentials = false };
+        }
+
+        public void SetLoginRequired(SecuritySession session, bool required)
+        {
+            RequireAdmin(session); SecurityStore store = LoadStore(); if (store.LoginRequired == required) return;
+            store.LoginRequired = required; SaveStore(store); TryLog(session.Username, required ? "تفعيل تسجيل الدخول" : "تعطيل تسجيل الدخول", required ? "سيطلب عند التشغيل والقفل" : "سيفتح البرنامج مباشرة");
         }
 
         public SecuritySession Login(string username, string password)
@@ -121,6 +147,7 @@ namespace PatientRecordsSaudi.Services
             {
                 SecurityUserRecord upgraded = CreateRecord(user.Username, user.DisplayName, user.Role, password, dbPassword); upgraded.IsActive = user.IsActive; store.Users[store.Users.IndexOf(user)] = upgraded; user = upgraded; SaveStore(store);
             }
+            SaveDeviceKey(dbPassword);
             TryLog(key, "تسجيل دخول ناجح", user.Role);
             return Session(user, dbPassword, key == "admin" && password == "admin");
         }
@@ -170,8 +197,8 @@ namespace PatientRecordsSaudi.Services
             byte[] salt = Convert.FromBase64String(lines[0]), expected = Convert.FromBase64String(lines[1]), actual = Derive(password ?? "", salt, expected.Length);
             if (!FixedEquals(expected, actual)) throw new UnauthorizedAccessException("اسم المستخدم أو كلمة المرور غير صحيحة.");
             string dbPassword = Convert.ToBase64String(Derive("DB|" + password, salt, 32));
-            var store = new SecurityStore { Version = 2, Users = new List<SecurityUserRecord> { CreateRecord("admin", "مدير النظام", "مدير", password, dbPassword) } };
-            SaveStore(store); TryLog("admin", "ترقية ملف الحماية", "الانتقال إلى تنسيق الحسابات الجديد"); return Session(store.Users[0], dbPassword, false);
+            var store = new SecurityStore { Version = 2, LoginRequired = false, Users = new List<SecurityUserRecord> { CreateRecord("admin", "مدير النظام", "مدير", password, dbPassword) } };
+            SaveStore(store); SaveDeviceKey(dbPassword); TryLog("admin", "ترقية ملف الحماية", "الانتقال إلى تنسيق الحسابات الجديد"); return Session(store.Users[0], dbPassword, false);
         }
 
         private SecurityUserRecord CreateRecord(string username, string displayName, string role, string password, string dbPassword)
@@ -239,6 +266,19 @@ namespace PatientRecordsSaudi.Services
             byte[] plain = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(store, JsonOptions));
             try { AtomicWriteBytes(authPath, ProtectedData.Protect(plain, null, DataProtectionScope.CurrentUser)); }
             finally { CryptographicOperations.ZeroMemory(plain); }
+        }
+        private void SaveDeviceKey(string dbPassword)
+        {
+            byte[] key;
+            try { key = Convert.FromBase64String(dbPassword); }
+            catch (FormatException) { throw new InvalidDataException("مفتاح قاعدة البيانات غير صالح."); }
+            try { AtomicWriteBytes(deviceKeyPath, ProtectedData.Protect(key, Encoding.UTF8.GetBytes("SaudiPatientRecordsSecureV2"), DataProtectionScope.CurrentUser)); }
+            finally { CryptographicOperations.ZeroMemory(key); }
+        }
+        private byte[] ReadDeviceKey()
+        {
+            try { return ProtectedData.Unprotect(File.ReadAllBytes(deviceKeyPath), Encoding.UTF8.GetBytes("SaudiPatientRecordsSecureV2"), DataProtectionScope.CurrentUser); }
+            catch (CryptographicException) { throw new InvalidDataException("تعذر فتح مفتاح قاعدة البيانات المحمي لهذا المستخدم في Windows."); }
         }
         private void TryLog(string userName, string action, string details)
         {

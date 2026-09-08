@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
-using LiteDB;
+using System.Text.Json;
+using Microsoft.Data.Sqlite;
 using PatientRecordsSaudi.Models;
 using PatientRecordsSaudi.Services;
 
@@ -29,9 +31,14 @@ namespace PatientRecordsSaudi.Tests
 
                 string defaultFolder = Path.Combine(temp, "default-login"); Directory.CreateDirectory(defaultFolder); var defaultSecurity = new AppSecurity(defaultFolder);
                 Assert(defaultSecurity.EnsureDefaultConfiguration(), "Default admin configuration is created automatically");
+                Assert(!defaultSecurity.IsLoginRequired, "Login screen is disabled on a fresh installation");
+                using (SecuritySession passwordlessSession = defaultSecurity.OpenWithoutLogin()) Assert(passwordlessSession.IsAdmin, "Application opens without username or password by default");
                 using (SecuritySession defaultSession = defaultSecurity.Login("admin", "admin"))
                 {
                     Assert(defaultSession.IsAdmin && defaultSession.UsesDefaultCredentials, "Default admin/admin login works and is flagged for warning");
+                    defaultSecurity.SetLoginRequired(defaultSession, true); Assert(defaultSecurity.IsLoginRequired, "Login can be enabled from settings");
+                    bool passwordlessBlocked = false; try { using (SecuritySession denied = defaultSecurity.OpenWithoutLogin()) { } } catch (UnauthorizedAccessException) { passwordlessBlocked = true; } Assert(passwordlessBlocked, "Passwordless opening is blocked when login protection is enabled");
+                    defaultSecurity.SetLoginRequired(defaultSession, false); Assert(!defaultSecurity.IsLoginRequired, "Login can be disabled again from settings");
                     defaultSecurity.ChangePassword(defaultSession, "admin", "safe1234"); Assert(!defaultSession.UsesDefaultCredentials, "Default credential warning clears after password change");
                 }
                 using (SecuritySession changedSession = defaultSecurity.Login("admin", "safe1234")) Assert(changedSession.IsAdmin, "Customized admin password works");
@@ -48,6 +55,7 @@ namespace PatientRecordsSaudi.Tests
 
                 using (var db = new AppDatabase(temp, admin.MaterializeDatabasePassword(), admin.DisplayName))
                 {
+                    Assert(db.DatabasePath.EndsWith("patients.sqlite3", StringComparison.OrdinalIgnoreCase), "Active database is SQLite");
                     security.FlushPendingAudit(db); Assert(db.GetRecentAudit(100).Exists(x => x.EntityType == "Security"), "Security events are imported into audit log");
                     Patient one = db.AddPatient(NewPatient(id1, "مراجع الاختبار الأول", TestMobile(1)));
                     Patient two = db.AddPatient(NewPatient(id2, "مراجع الاختبار الثاني", TestMobile(2)));
@@ -86,7 +94,12 @@ namespace PatientRecordsSaudi.Tests
                     try { db.AddAppointment(new Appointment { PatientId = three.Id, FileNumber = three.FileNumber, PatientName = three.FullName, Title = "إجازة", VisitType = "مراجعة", StartsAt = monday, DurationMinutes = 30, Status = "مؤكد" }); } catch (InvalidOperationException) { closureBlocked = true; }
                     Assert(closureBlocked, "Configured closure date blocks appointments");
                     db.DeleteAttachment(attachment.Id); Assert(db.PurgeDeletedAttachments(DateTime.Now.AddDays(1)) == 1 && db.GetAttachments(two.Id, true).Count == 0, "Old deleted attachments can be permanently purged by admin");
+                    string backupFolder = Path.Combine(temp, "backup-test"); string backup = new BackupService(temp).CreateBackup(backupFolder, db);
+                    using (ZipArchive archive = ZipFile.OpenRead(backup)) Assert(archive.GetEntry("patients.sqlite3") != null && archive.GetEntry("database.key") != null && archive.GetEntry("manifest.txt") != null, "Consistent SQLite backup contains database, protected key and integrity manifest");
+                    db.Checkpoint(); byte[] header = new byte[16]; using (FileStream input = new FileStream(db.DatabasePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) input.ReadExactly(header);
+                    Assert(System.Text.Encoding.ASCII.GetString(header) != "SQLite format 3\0", "SQLite file header is encrypted by SQLCipher");
                 }
+                bool wrongDatabaseKeyBlocked = false; try { using (var wrong = new AppDatabase(temp, "wrong-key", "اختبار")) { } } catch { wrongDatabaseKeyBlocked = true; } Assert(wrongDatabaseKeyBlocked, "Wrong SQLite encryption key is rejected");
                 AppDatabase.CleanupTemporaryAttachments(); Assert(!Directory.EnumerateDirectories(Path.GetTempPath(), "SaudiPatientRecordsView_*").Any(), "Decrypted temporary attachments are removed");
                 using (var readOnlyDb = new AppDatabase(temp, admin.MaterializeDatabasePassword(), employee.DisplayName, "قراءة فقط"))
                 {
@@ -119,17 +132,23 @@ namespace PatientRecordsSaudi.Tests
         private static void RunTenThousandCapacityTest(string root)
         {
             string folder = Path.Combine(root, "capacity"); Directory.CreateDirectory(folder); string password = "Capacity-" + Guid.NewGuid().ToString("N");
-            string path = Path.Combine(folder, "patients.db");
-            using (var lite = new LiteDatabase(new ConnectionString { Filename = path, Password = password, Connection = ConnectionType.Direct }))
+            string path = Path.Combine(folder, "patients.sqlite3"); AppSettings settings;
+            using (var schema = new AppDatabase(folder, password, "اختبار السعة")) { settings = schema.GetSettings(); schema.Close(); }
+            SQLitePCL.Batteries_V2.Init();
+            string connectionString = new SqliteConnectionStringBuilder { DataSource = path, Mode = SqliteOpenMode.ReadWrite, Cache = SqliteCacheMode.Private, Pooling = false, ForeignKeys = true, Password = password }.ToString();
+            using (var sqlite = new SqliteConnection(connectionString))
             {
-                var patients = lite.GetCollection<Patient>("patients"); var batch = new List<Patient>(1000);
+                sqlite.Open(); using SqliteTransaction tx = sqlite.BeginTransaction(); using SqliteCommand insert = sqlite.CreateCommand(); insert.Transaction = tx;
+                insert.CommandText = @"INSERT INTO patients(id,file_number,national_id,normalized_name,mobile,city,date_of_birth_ticks,created_ticks,last_visit_ticks,is_archived,payload)
+VALUES($id,$file,$national,$name,$mobile,$city,NULL,$created,NULL,0,$payload);";
+                insert.Parameters.Add("$id", SqliteType.Text); insert.Parameters.Add("$file", SqliteType.Integer); insert.Parameters.Add("$national", SqliteType.Text); insert.Parameters.Add("$name", SqliteType.Text); insert.Parameters.Add("$mobile", SqliteType.Text); insert.Parameters.Add("$city", SqliteType.Text); insert.Parameters.Add("$created", SqliteType.Integer); insert.Parameters.Add("$payload", SqliteType.Text);
+                var json = new JsonSerializerOptions { IgnoreReadOnlyProperties = true };
                 for (int i = 1; i <= 10000; i++)
                 {
-                    batch.Add(new Patient { Id = Guid.NewGuid(), FileNumber = i, NationalId = "T" + i.ToString("D9"), FullName = "مراجع سعة " + i, NormalizedName = "مراجع سعه " + i, Mobile = "M" + i.ToString("D9"), City = "اختبار", CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now });
-                    if (batch.Count == 1000) { patients.InsertBulk(batch); batch.Clear(); }
+                    var patient = new Patient { Id = Guid.NewGuid(), FileNumber = i, NationalId = "T" + i.ToString("D9"), FullName = "مراجع سعة " + i, NormalizedName = "مراجع سعه " + i, Mobile = "M" + i.ToString("D9"), City = "اختبار", CreatedAt = DateTime.Now, UpdatedAt = DateTime.Now };
+                    insert.Parameters["$id"].Value = patient.Id.ToString("N"); insert.Parameters["$file"].Value = i; insert.Parameters["$national"].Value = patient.NationalId; insert.Parameters["$name"].Value = patient.NormalizedName; insert.Parameters["$mobile"].Value = patient.Mobile; insert.Parameters["$city"].Value = patient.City; insert.Parameters["$created"].Value = patient.CreatedAt.Ticks; insert.Parameters["$payload"].Value = JsonSerializer.Serialize(patient, json); insert.ExecuteNonQuery();
                 }
-                lite.GetCollection<AppSettings>("settings").Insert(new AppSettings { Id = 1, NextFileNumber = 10001, ClinicName = "اختبار السعة", DefaultAppointmentMinutes = 30, WorkDayStartMinutes = 480, WorkDayEndMinutes = 1020, BackupIntervalHours = 4, UpdatedAt = DateTime.Now });
-                lite.Checkpoint();
+                settings.NextFileNumber = 10001; settings.ClinicName = "اختبار السعة"; settings.UpdatedAt = DateTime.Now; using SqliteCommand update = sqlite.CreateCommand(); update.Transaction = tx; update.CommandText = "UPDATE settings SET payload=$payload WHERE id=1;"; update.Parameters.AddWithValue("$payload", JsonSerializer.Serialize(settings, json)); update.ExecuteNonQuery(); tx.Commit();
             }
             using (var database = new AppDatabase(folder, password, "اختبار السعة"))
             {

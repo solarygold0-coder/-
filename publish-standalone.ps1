@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$Runtime = "win-x64",
-    [string]$Version = "4.1.1"
+    [string]$Version = "4.2.0"
 )
 
 $ErrorActionPreference = "Stop"
@@ -57,6 +57,8 @@ $size = (Get-Item $releaseExe).Length
     "Architecture=x64"
     "Packaging=Unpackaged Win32 single-file EXE"
     "Runtime=.NET 10 self-contained"
+    "StartupLogin=Disabled by default; configurable by administrator"
+    "Database=Encrypted SQLite (SQLCipher)"
     "DigitalSignature=None (unsigned public-source build)"
     "SizeBytes=$size"
     "SHA256=$hash"

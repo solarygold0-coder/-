@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$Runtime = "win-x64",
-    [string]$Version = "4.1.1"
+    [string]$Version = "4.2.0"
 )
 
 $ErrorActionPreference = "Stop"
@@ -71,6 +71,8 @@ $standaloneHash = (Get-FileHash $standaloneOut -Algorithm SHA256).Hash.ToLowerIn
     "InstallScope=Per-user"
     "DefaultUsername=admin"
     "DefaultPassword=admin (change immediately)"
+    "StartupLogin=Disabled by default; configurable by administrator"
+    "Database=Encrypted SQLite (SQLCipher)"
     "DigitalSignature=None (unsigned public-source build)"
     "SetupSHA256=$setupHash"
     "StandaloneSHA256=$standaloneHash"

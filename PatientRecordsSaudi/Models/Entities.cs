@@ -1,13 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using LiteDB;
 
 namespace PatientRecordsSaudi.Models
 {
     public sealed class Patient
     {
-        [BsonId] public Guid Id { get; set; }
+        public Guid Id { get; set; }
         public long FileNumber { get; set; }
         public string IdentityType { get; set; }
         public string NationalId { get; set; }
@@ -32,14 +31,13 @@ namespace PatientRecordsSaudi.Models
         public bool IsArchived { get; set; }
         public DateTime? ArchivedAt { get; set; }
         public string ArchiveReason { get; set; }
-
-        [BsonIgnore] public string BirthDateText { get { return DateOfBirth.HasValue ? DateOfBirth.Value.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture) : ""; } }
-        [BsonIgnore] public string StatusText { get { return IsArchived ? "مؤرشف" : "نشط"; } }
+        public string BirthDateText { get { return DateOfBirth.HasValue ? DateOfBirth.Value.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture) : ""; } }
+        public string StatusText { get { return IsArchived ? "مؤرشف" : "نشط"; } }
     }
 
     public sealed class Appointment
     {
-        [BsonId] public Guid Id { get; set; }
+        public Guid Id { get; set; }
         public Guid PatientId { get; set; }
         public long FileNumber { get; set; }
         public string PatientName { get; set; }
@@ -55,14 +53,13 @@ namespace PatientRecordsSaudi.Models
         public bool IsDeleted { get; set; }
         public DateTime? DeletedAt { get; set; }
         public string DeletedBy { get; set; }
-
-        [BsonIgnore] public string DateText { get { string[] m = { "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر" }; return StartsAt.Day.ToString("00") + " - " + StartsAt.Month.ToString("00") + " " + m[StartsAt.Month - 1] + " - " + StartsAt.Year.ToString("0000"); } }
-        [BsonIgnore] public string TimeText { get { int h = StartsAt.Hour % 12; if (h == 0) h = 12; return h.ToString("00") + ":" + StartsAt.Minute.ToString("00") + " " + (StartsAt.Hour >= 12 ? "م" : "ص"); } }
+        public string DateText { get { string[] m = { "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر" }; return StartsAt.Day.ToString("00") + " - " + StartsAt.Month.ToString("00") + " " + m[StartsAt.Month - 1] + " - " + StartsAt.Year.ToString("0000"); } }
+        public string TimeText { get { int h = StartsAt.Hour % 12; if (h == 0) h = 12; return h.ToString("00") + ":" + StartsAt.Minute.ToString("00") + " " + (StartsAt.Hour >= 12 ? "م" : "ص"); } }
     }
 
     public sealed class PatientTask
     {
-        [BsonId] public Guid Id { get; set; }
+        public Guid Id { get; set; }
         public Guid PatientId { get; set; }
         public long FileNumber { get; set; }
         public string PatientName { get; set; }
@@ -77,14 +74,13 @@ namespace PatientRecordsSaudi.Models
         public bool IsDeleted { get; set; }
         public DateTime? DeletedAt { get; set; }
         public string DeletedBy { get; set; }
-
-        [BsonIgnore] public string DueText { get { int h = DueAt.Hour % 12; if (h == 0) h = 12; return DueAt.Year.ToString("0000") + "/" + DueAt.Month.ToString("00") + "/" + DueAt.Day.ToString("00") + " " + h.ToString("00") + ":" + DueAt.Minute.ToString("00") + " " + (DueAt.Hour >= 12 ? "م" : "ص"); } }
-        [BsonIgnore] public string CompletionText { get { return IsCompleted ? "مكتملة" : "مفتوحة"; } }
+        public string DueText { get { int h = DueAt.Hour % 12; if (h == 0) h = 12; return DueAt.Year.ToString("0000") + "/" + DueAt.Month.ToString("00") + "/" + DueAt.Day.ToString("00") + " " + h.ToString("00") + ":" + DueAt.Minute.ToString("00") + " " + (DueAt.Hour >= 12 ? "م" : "ص"); } }
+        public string CompletionText { get { return IsCompleted ? "مكتملة" : "مفتوحة"; } }
     }
 
     public sealed class AuditEntry
     {
-        [BsonId] public Guid Id { get; set; }
+        public Guid Id { get; set; }
         public DateTime OccurredAt { get; set; }
         public string Action { get; set; }
         public string EntityType { get; set; }
@@ -97,7 +93,7 @@ namespace PatientRecordsSaudi.Models
 
     public sealed class AppSettings
     {
-        [BsonId] public int Id { get; set; }
+        public int Id { get; set; }
         public long NextFileNumber { get; set; }
         public int LastInventoryAlertYear { get; set; }
         public bool SecurityNoticeShown { get; set; }
@@ -123,7 +119,7 @@ namespace PatientRecordsSaudi.Models
 
     public sealed class PatientAttachment
     {
-        [BsonId] public Guid Id { get; set; }
+        public Guid Id { get; set; }
         public Guid PatientId { get; set; }
         public long FileNumber { get; set; }
         public string OriginalName { get; set; }
@@ -137,15 +133,14 @@ namespace PatientRecordsSaudi.Models
         public bool IsDeleted { get; set; }
         public DateTime? DeletedAt { get; set; }
         public string DeletedBy { get; set; }
-
-        [BsonIgnore] public string SizeText { get { return SizeBytes < 1024 * 1024 ? Math.Max(1, SizeBytes / 1024).ToString("N0") + " ك.ب" : (SizeBytes / 1024d / 1024d).ToString("N1") + " م.ب"; } }
-        [BsonIgnore] public string UploadedText { get { return UploadedAt.ToString("yyyy/MM/dd HH:mm", CultureInfo.InvariantCulture); } }
-        [BsonIgnore] public string StatusText { get { return IsDeleted ? "محذوف" : "متاح"; } }
+        public string SizeText { get { return SizeBytes < 1024 * 1024 ? Math.Max(1, SizeBytes / 1024).ToString("N0") + " ك.ب" : (SizeBytes / 1024d / 1024d).ToString("N1") + " م.ب"; } }
+        public string UploadedText { get { return UploadedAt.ToString("yyyy/MM/dd HH:mm", CultureInfo.InvariantCulture); } }
+        public string StatusText { get { return IsDeleted ? "محذوف" : "متاح"; } }
     }
 
     public sealed class ClosureDate
     {
-        [BsonId] public Guid Id { get; set; }
+        public Guid Id { get; set; }
         public DateTime Date { get; set; }
         public string Reason { get; set; }
         public DateTime CreatedAt { get; set; }
