@@ -17,7 +17,7 @@
     <StandardDirectory Id="LocalAppDataFolder">
       <Directory Id="LocalProgramsFolder" Name="Programs">
         <Directory Id="INSTALLFOLDER" Name="Saudi Patient Records">
-          <Component Id="ApplicationComponent" Guid="*" Bitness="always64">
+          <Component Id="ApplicationComponent" Guid="{A6E6C08A-4D18-47AC-A34D-1E7917AF02AE}" Bitness="always64">
             <File Id="ApplicationFile" Source="$(var.PublishDir)\SaudiPatientRecords.exe">
               <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="سجلات المراجعين" Description="نظام إدارة سجلات المراجعين" WorkingDirectory="INSTALLFOLDER" Advertise="no" />
               <Shortcut Id="DesktopShortcut" Directory="DesktopFolder" Name="سجلات المراجعين" Description="نظام إدارة سجلات المراجعين" WorkingDirectory="INSTALLFOLDER" Advertise="no" />
