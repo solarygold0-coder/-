@@ -31,6 +31,11 @@
     <Copyright>Copyright © Mohammed Mousa Asiri 2026</Copyright>
   </PropertyGroup>
   <ItemGroup>
+    <!-- These files are compiled into Modern.Core and referenced from there. -->
+    <Compile Remove="Models\**\*.cs" />
+    <Compile Remove="Services\**\*.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\PatientRecordsSaudi.Modern.Core\PatientRecordsSaudi.Modern.Core.csproj" />
   </ItemGroup>
 </Project>

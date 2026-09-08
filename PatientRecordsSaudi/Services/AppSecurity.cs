@@ -205,7 +205,7 @@ namespace PatientRecordsSaudi.Services
         private static string NormalizeUsername(string s) { return (s ?? "").Trim().ToLowerInvariant(); }
         private static string CleanDisplayName(string s) { string v = (s ?? "").Trim(); if (v.Length < 2) throw new ArgumentException("أدخل اسم الموظف بصورة صحيحة."); return v; }
         private static byte[] RandomBytes(int n) { byte[] b = new byte[n]; using (var r = RandomNumberGenerator.Create()) r.GetBytes(b); return b; }
-        private static byte[] Derive(string p, byte[] salt, int n) { using (var d = new Rfc2898DeriveBytes(p, salt, Iterations, HashAlgorithmName.SHA256)) return d.GetBytes(n); }
+        private static byte[] Derive(string p, byte[] salt, int n) { return Rfc2898DeriveBytes.Pbkdf2(p ?? "", salt, Iterations, HashAlgorithmName.SHA256, n); }
         private static byte[] Join(byte[] a, byte[] b) { byte[] r = new byte[a.Length + b.Length]; Buffer.BlockCopy(a, 0, r, 0, a.Length); Buffer.BlockCopy(b, 0, r, a.Length, b.Length); return r; }
         private static bool FixedEquals(byte[] a, byte[] b) { if (a == null || b == null) return false; int x = a.Length ^ b.Length; for (int i = 0; i < a.Length && i < b.Length; i++) x |= a[i] ^ b[i]; return x == 0; }
         private static void AtomicWrite(string p, string c) { string t = p + ".tmp"; File.WriteAllText(t, c, new UTF8Encoding(false)); if (File.Exists(p)) File.Replace(t, p, null, true); else File.Move(t, p); TryDelete(p + ".bak"); TryDelete(p + ".legacy"); }
