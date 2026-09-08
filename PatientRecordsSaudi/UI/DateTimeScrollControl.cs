@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Drawing;
 using System.Windows.Forms;
 using PatientRecordsSaudi.Services;
@@ -50,6 +51,8 @@ namespace PatientRecordsSaudi.UI
             int max = DateTime.DaysInMonth(y, m); if (day.SelectedIndex + 1 > max) day.SelectedIndex = max - 1;
         }
 
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public DateTime Value
         {
             get
