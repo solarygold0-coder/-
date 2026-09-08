@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$Runtime = "win-x64",
-    [string]$Version = "4.2.1"
+    [string]$Version = "5.0.0"
 )
 
 $ErrorActionPreference = "Stop"
@@ -55,7 +55,7 @@ foreach ($file in @($setupOut, $standaloneOut)) {
 
 $install = Start-Process $setupOut -ArgumentList "/quiet /norestart" -Wait -PassThru
 if ($install.ExitCode -ne 0 -and $install.ExitCode -ne 3010) { throw "Automated installer verification failed with exit code $($install.ExitCode)." }
-$installedExe = Join-Path $env:LOCALAPPDATA "Programs\Saudi Patient Records\SaudiPatientRecords.exe"
+$installedExe = Join-Path $env:LOCALAPPDATA "Programs\Saudi Patient Records 5\SaudiPatientRecords.exe"
 if (-not (Test-Path $installedExe)) { throw "Installed executable was not found in the expected per-user location." }
 $selfTest = Start-Process $installedExe -ArgumentList "--self-test" -Wait -PassThru
 if ($selfTest.ExitCode -ne 0) { throw "Installed application self-test failed with exit code $($selfTest.ExitCode)." }
@@ -69,9 +69,9 @@ $standaloneHash = (Get-FileHash $standaloneOut -Algorithm SHA256).Hash.ToLowerIn
     "Version=$Version"
     "Installer=Interactive WiX Toolset 6 / Windows Installer Setup.exe"
     "InstallScope=Per-user"
-    "DefaultUsername=admin"
-    "DefaultPassword=admin (change immediately)"
-    "StartupLogin=Disabled by default; configurable by administrator"
+    "DefaultAccount=None"
+    "StartupLogin=Disabled; a named manager account is required before enabling"
+    "DataProfile=Independent SaudiPatientRecordsV5; no automatic legacy copy"
     "Database=Encrypted SQLite (SQLCipher)"
     "DigitalSignature=None (unsigned public-source build)"
     "SetupSHA256=$setupHash"

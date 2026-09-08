@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$Runtime = "win-x64",
-    [string]$Version = "4.2.1"
+    [string]$Version = "5.0.0"
 )
 
 $ErrorActionPreference = "Stop"
@@ -57,7 +57,9 @@ $size = (Get-Item $releaseExe).Length
     "Architecture=x64"
     "Packaging=Unpackaged Win32 single-file EXE"
     "Runtime=.NET 10 self-contained"
-    "StartupLogin=Disabled by default; configurable by administrator"
+    "DefaultAccount=None"
+    "StartupLogin=Disabled; a named manager account is required before enabling"
+    "DataProfile=Independent SaudiPatientRecordsV5; no automatic legacy copy"
     "Database=Encrypted SQLite (SQLCipher)"
     "DigitalSignature=None (unsigned public-source build)"
     "SizeBytes=$size"

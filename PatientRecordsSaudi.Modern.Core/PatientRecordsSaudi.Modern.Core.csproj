@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <LangVersion>14.0</LangVersion>
-    <Version>4.2.1</Version>
+    <Version>5.0.0</Version>
     <Company>Mohammed Mousa Asiri</Company>
     <Product>Saudi Patient Records</Product>
     <Copyright>Copyright © Mohammed Mousa Asiri 2026</Copyright>
@@ -14,6 +14,7 @@
   <ItemGroup>
     <Compile Include="..\PatientRecordsSaudi\Models\Entities.cs" Link="Domain\Entities.cs" />
     <Compile Include="..\PatientRecordsSaudi\Services\SaudiValidation.cs" Link="Application\SaudiValidation.cs" />
+    <Compile Include="..\PatientRecordsSaudi\Services\AppProfile.cs" Link="Application\AppProfile.cs" />
     <Compile Include="..\PatientRecordsSaudi\Services\AppDatabase.cs" Link="Infrastructure\AppDatabase.cs" />
     <Compile Include="..\PatientRecordsSaudi\Services\LegacyLiteDbMigration.cs" Link="Infrastructure\LegacyLiteDbMigration.cs" />
     <Compile Include="..\PatientRecordsSaudi\Services\AppSecurity.cs" Link="Infrastructure\AppSecurity.cs" />

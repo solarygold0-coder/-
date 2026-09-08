@@ -19,9 +19,8 @@ namespace PatientRecordsSaudi.UI
             MinimizeBox = false; MaximizeBox = false; ClientSize = new Size(480, showDefaultCredentials ? 380 : 320); BackColor = UiKit.Background;
             Controls.Add(new Label { Text = "نظام إدارة سجلات المراجعين", Dock = DockStyle.Top, Height = 62, TextAlign = ContentAlignment.MiddleCenter, BackColor = UiKit.Primary, ForeColor = Color.White, Font = new Font("Tahoma", 16, FontStyle.Bold) });
             var panel = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(28), ColumnCount = 1, AutoScroll = true };
-            if (showDefaultCredentials) panel.Controls.Add(new Label { Text = "الدخول الافتراضي: admin / admin — يجب تغيير كلمة المرور بعد الدخول.", AutoSize = true, ForeColor = UiKit.Danger, Font = UiKit.BoldFont, MaximumSize = new Size(400, 0), Margin = new Padding(3, 3, 3, 12) });
-            panel.Controls.Add(UiKit.Label("اسم المستخدم", true)); panel.Controls.Add(username); username.Text = string.IsNullOrEmpty(expectedUsername) ? "admin" : expectedUsername; username.ReadOnly = !string.IsNullOrEmpty(expectedUsername);
-            panel.Controls.Add(UiKit.Label("كلمة المرور", true)); password.UseSystemPasswordChar = true; if (showDefaultCredentials) password.Text = "admin"; panel.Controls.Add(password);
+            panel.Controls.Add(UiKit.Label("اسم المستخدم", true)); panel.Controls.Add(username); username.Text = string.IsNullOrEmpty(expectedUsername) ? "" : expectedUsername; username.ReadOnly = !string.IsNullOrEmpty(expectedUsername);
+            panel.Controls.Add(UiKit.Label("كلمة المرور", true)); password.UseSystemPasswordChar = true; panel.Controls.Add(password);
             var login = UiKit.Button("دخول", OnLogin, false); login.Dock = DockStyle.Top; panel.Controls.Add(login); Controls.Add(panel); AcceptButton = login;
         }
 

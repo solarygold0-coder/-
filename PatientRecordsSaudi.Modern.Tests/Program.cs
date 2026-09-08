@@ -3,9 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
 using PatientRecordsSaudi.Models;
 using PatientRecordsSaudi.Services;
@@ -32,27 +30,35 @@ namespace PatientRecordsSaudi.Tests
                 Assert(AppDatabase.MaxPatients == 10000, "Administrative capacity is 10,000 patients");
 
                 string defaultFolder = Path.Combine(temp, "default-login"); Directory.CreateDirectory(defaultFolder); var defaultSecurity = new AppSecurity(defaultFolder);
-                Assert(defaultSecurity.EnsureDefaultConfiguration(), "Default admin configuration is created automatically");
+                Assert(defaultSecurity.EnsureDefaultConfiguration(), "Passwordless local configuration is created automatically");
                 Assert(!defaultSecurity.IsLoginRequired, "Login screen is disabled on a fresh installation");
-                using (SecuritySession passwordlessSession = defaultSecurity.OpenWithoutLogin()) Assert(passwordlessSession.IsAdmin, "Application opens without username or password by default");
-                using (SecuritySession defaultSession = defaultSecurity.Login("admin", "admin"))
+                using (SecuritySession passwordlessSession = defaultSecurity.OpenWithoutLogin())
                 {
-                    Assert(defaultSession.IsAdmin && defaultSession.UsesDefaultCredentials, "Default admin/admin login works and is flagged for warning");
-                    defaultSecurity.SetLoginRequired(defaultSession, true); Assert(defaultSecurity.IsLoginRequired, "Login can be enabled from settings");
-                    bool passwordlessBlocked = false; try { using (SecuritySession denied = defaultSecurity.OpenWithoutLogin()) { } } catch (UnauthorizedAccessException) { passwordlessBlocked = true; } Assert(passwordlessBlocked, "Passwordless opening is blocked when login protection is enabled");
-                    defaultSecurity.SetLoginRequired(defaultSession, false); Assert(!defaultSecurity.IsLoginRequired, "Login can be disabled again from settings");
-                    defaultSecurity.ChangePassword(defaultSession, "admin", "safe1234"); Assert(!defaultSession.UsesDefaultCredentials, "Default credential warning clears after password change");
+                    Assert(passwordlessSession.IsAdmin && passwordlessSession.Username == "local", "Application opens in a local administrative session without credentials");
+                    Assert(defaultSecurity.GetUsers(passwordlessSession).Count == 0, "Fresh installation contains no default accounts");
+                    bool adminNameBlocked = false; try { defaultSecurity.AddUser(passwordlessSession, "admin", "اسم محظور", "مدير", "safe1234"); } catch (ArgumentException) { adminNameBlocked = true; } Assert(adminNameBlocked, "Reserved admin account is removed and cannot be recreated");
+                    bool enableWithoutManagerBlocked = false; try { defaultSecurity.SetLoginRequired(passwordlessSession, true); } catch (InvalidOperationException) { enableWithoutManagerBlocked = true; } Assert(enableWithoutManagerBlocked, "Login cannot be enabled before creating a named manager");
+                    defaultSecurity.AddUser(passwordlessSession, "manager", "المدير المسمى", "مدير", "safe1234");
+                    defaultSecurity.SetLoginRequired(passwordlessSession, true); Assert(defaultSecurity.IsLoginRequired, "Login can be enabled after creating a named manager");
                 }
-                using (SecuritySession changedSession = defaultSecurity.Login("admin", "safe1234")) Assert(changedSession.IsAdmin, "Customized admin password works");
+                bool passwordlessBlocked = false; try { using (SecuritySession denied = defaultSecurity.OpenWithoutLogin()) { } } catch (UnauthorizedAccessException) { passwordlessBlocked = true; } Assert(passwordlessBlocked, "Passwordless opening is blocked when explicitly enabled");
+                using (SecuritySession namedManager = defaultSecurity.Login("manager", "safe1234")) { Assert(namedManager.IsAdmin, "Named manager login works"); defaultSecurity.SetLoginRequired(namedManager, false); }
 
-                string upgradeFolder = Path.Combine(temp, "upgrade-login"); Directory.CreateDirectory(upgradeFolder); var previousSecurity = new AppSecurity(upgradeFolder); previousSecurity.EnsureDefaultConfiguration();
-                using (SecuritySession previousAdmin = previousSecurity.Login("admin", "admin")) previousSecurity.SetLoginRequired(previousAdmin, true);
-                string upgradeAuthPath = Path.Combine(upgradeFolder, "auth.dat"); byte[] oldPlain = ProtectedData.Unprotect(File.ReadAllBytes(upgradeAuthPath), null, DataProtectionScope.CurrentUser); JsonNode oldStore = JsonNode.Parse(oldPlain); oldStore["StartupPolicyRevision"] = 0; File.WriteAllBytes(upgradeAuthPath, ProtectedData.Protect(System.Text.Encoding.UTF8.GetBytes(oldStore.ToJsonString()), null, DataProtectionScope.CurrentUser)); CryptographicOperations.ZeroMemory(oldPlain);
-                var upgradedSecurity = new AppSecurity(upgradeFolder); Assert(upgradedSecurity.IsLoginRequired, "Previous installation can contain inherited startup login"); Assert(upgradedSecurity.EnsureDirectStartupForCurrentRelease(), "Upgrade disables inherited startup login exactly once"); Assert(!upgradedSecurity.IsLoginRequired, "Upgraded application opens directly");
-                using (SecuritySession upgradedAdmin = upgradedSecurity.OpenWithoutLogin()) { upgradedSecurity.SetLoginRequired(upgradedAdmin, true); Assert(!upgradedSecurity.EnsureDirectStartupForCurrentRelease() && upgradedSecurity.IsLoginRequired, "Later administrator choice to enable login is preserved"); }
+                string profileRoot = Path.Combine(temp, "profile-isolation");
+                string legacyFolder = Path.Combine(profileRoot, "SaudiPatientRecordsSecureV2"); Directory.CreateDirectory(legacyFolder);
+                var legacySecurity = new AppSecurity(legacyFolder); legacySecurity.EnsureDefaultConfiguration();
+                using (SecuritySession legacyLocal = legacySecurity.OpenWithoutLogin()) { legacySecurity.AddUser(legacyLocal, "oldmanager", "مدير النسخة القديمة", "مدير", "oldm1234"); legacySecurity.SetLoginRequired(legacyLocal, true); }
+                string currentFolder = AppProfile.ResolveDataDirectory(profileRoot);
+                Assert(!string.Equals(currentFolder, legacyFolder, StringComparison.OrdinalIgnoreCase), "Version 5 uses a new independent data profile");
+                AppProfile.Initialize(currentFolder); var isolatedSecurity = new AppSecurity(currentFolder);
+                Assert(isolatedSecurity.EnsureDefaultConfiguration(), "Version 5 creates new security material instead of copying an older profile");
+                Assert(!isolatedSecurity.IsLoginRequired && legacySecurity.IsLoginRequired, "Older authentication settings cannot enable login in version 5");
+                Assert(File.Exists(Path.Combine(currentFolder, AppProfile.GenerationMarkerName)), "Independent version 5 profile marker is present");
 
-                string adminPassword = "test1234", employeePassword = "empl1234";
-                var security = new AppSecurity(temp); bool invalidPasswordBlocked = false; try { security.Configure("مدير الاختبار", "UPPER1"); } catch (ArgumentException) { invalidPasswordBlocked = true; } Assert(invalidPasswordBlocked, "Custom password policy rejects uppercase and requires lowercase letters plus digits"); SecuritySession admin = security.Configure("مدير الاختبار", adminPassword);
+                string managerPassword = "test1234", employeePassword = "empl1234";
+                var security = new AppSecurity(temp); security.EnsureDefaultConfiguration(); SecuritySession admin = security.OpenWithoutLogin();
+                bool invalidPasswordBlocked = false; try { security.AddUser(admin, "invalid", "مدير الاختبار", "مدير", "UPPER1"); } catch (ArgumentException) { invalidPasswordBlocked = true; } Assert(invalidPasswordBlocked, "Custom password policy rejects uppercase and requires lowercase letters plus digits");
+                security.AddUser(admin, "testmanager", "مدير الاختبار", "مدير", managerPassword);
                 bool overLimitBlocked = false; try { security.AddUser(admin, "baduser", "مستخدم غير صالح", "موظف", "abcde1234"); } catch (ArgumentException) { overLimitBlocked = true; } Assert(overLimitBlocked, "Custom password policy enforces four-letter maximum");
                 security.AddUser(admin, "employee", "موظف الاختبار", "موظف", employeePassword); SecuritySession employee = security.Login("employee", employeePassword);
                 Assert(employee.DisplayName == "موظف الاختبار" && !employee.IsAdmin, "Per-user login and role");

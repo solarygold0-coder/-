@@ -4,25 +4,26 @@
   <Package Id="MohammedMousaAsiri.SaudiPatientRecords"
            Name="نظام إدارة سجلات المراجعين"
            Manufacturer="Mohammed Mousa Asiri"
-           Version="4.2.1"
+           Version="5.0.0"
            Language="1025"
            Scope="perUser"
            InstallerVersion="500"
            Compressed="yes">
 
-    <SummaryInformation Description="Saudi Patient Records personal desktop application" Manufacturer="Mohammed Mousa Asiri" />
+    <SummaryInformation Description="Saudi Patient Records desktop application" Manufacturer="Mohammed Mousa Asiri" />
     <MediaTemplate EmbedCab="yes" />
     <MajorUpgrade DowngradeErrorMessage="توجد نسخة أحدث من البرنامج مثبتة على هذا الجهاز." />
 
     <StandardDirectory Id="LocalAppDataFolder">
       <Directory Id="LocalProgramsFolder" Name="Programs">
-        <Directory Id="INSTALLFOLDER" Name="Saudi Patient Records">
+        <Directory Id="INSTALLFOLDER" Name="Saudi Patient Records 5">
           <Component Id="ApplicationComponent" Guid="{A6E6C08A-4D18-47AC-A34D-1E7917AF02AE}" Bitness="always64">
             <File Id="ApplicationFile" Source="$(var.PublishDir)\SaudiPatientRecords.exe">
               <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="سجلات المراجعين" Description="نظام إدارة سجلات المراجعين" WorkingDirectory="INSTALLFOLDER" Advertise="no" />
               <Shortcut Id="DesktopShortcut" Directory="DesktopFolder" Name="سجلات المراجعين" Description="نظام إدارة سجلات المراجعين" WorkingDirectory="INSTALLFOLDER" Advertise="no" />
             </File>
-            <RegistryValue Root="HKCU" Key="Software\Mohammed Mousa Asiri\Saudi Patient Records" Name="InstallPath" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+            <RegistryValue Root="HKCU" Key="Software\Mohammed Mousa Asiri\Saudi Patient Records V5" Name="InstallPath" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+            <RemoveRegistryValue Id="RemoveLegacyAutoStart" Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="SaudiPatientRecords" Action="removeOnInstall" />
             <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
             <RemoveFolder Id="RemoveLocalProgramsFolder" Directory="LocalProgramsFolder" On="uninstall" />
           </Component>

@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Windows.Forms;
+using Microsoft.Win32;
 using PatientRecordsSaudi.Services;
 using PatientRecordsSaudi.UI;
 
@@ -9,8 +10,6 @@ namespace PatientRecordsSaudi
 {
     internal static class Program
     {
-        private const string CurrentDataFolderName = "SaudiPatientRecordsSecureV2";
-        private const string LegacyDataFolderName = "SaudiPatientRecords";
         public static string DataDirectory { get; private set; }
 
         [STAThread]
@@ -23,7 +22,7 @@ namespace PatientRecordsSaudi
             }
 
             bool firstInstance;
-            using (var instanceMutex = new Mutex(true, @"Local\SaudiPatientRecordsSecureV2_2AE74028_248D_4EE5_96FD_02DC05C303C6", out firstInstance))
+            using (var instanceMutex = new Mutex(true, @"Local\SaudiPatientRecordsV5_64DD9F48_4C80_45A8_A169_F79CE8D6D211", out firstInstance))
             {
                 if (!firstInstance)
                 {
@@ -35,17 +34,9 @@ namespace PatientRecordsSaudi
                 ApplicationConfiguration.Initialize();
                 Application.ApplicationExit += delegate { UiKit.DisposeResources(); };
                 string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                DataDirectory = Path.Combine(localAppData, CurrentDataFolderName);
-                string legacyDataDirectory = Path.Combine(localAppData, LegacyDataFolderName);
-                try { MigrateLegacyDataOnce(legacyDataDirectory, DataDirectory); }
-                catch (Exception ex)
-                {
-                    LogUnexpectedError(ex, "Migration");
-                    MessageBox.Show("تعذر عزل بيانات النسخة الجديدة وترحيل البيانات السابقة بأمان. أغلق أي نسخة قديمة ثم أعد تشغيل البرنامج. لم يتم تعديل بياناتك القديمة.\n\n" + ex.Message,
-                        "تعذر ترحيل البيانات", MessageBoxButtons.OK, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1,
-                        MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
-                    return;
-                }
+                DataDirectory = AppProfile.ResolveDataDirectory(localAppData);
+                AppProfile.Initialize(DataDirectory);
+                DisableLegacyAutoStart();
                 Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
                 Application.ThreadException += delegate(object sender, ThreadExceptionEventArgs e)
                 {
@@ -60,26 +51,19 @@ namespace PatientRecordsSaudi
                 try
                 {
                     var security = new AppSecurity(DataDirectory);
-                    bool defaultCreated = security.EnsureDefaultConfiguration();
-                    security.EnsureDirectStartupForCurrentRelease();
+                    security.EnsureDefaultConfiguration();
                     SecuritySession activeSession = null;
                     if (!security.IsLoginRequired)
                     {
-                        try { activeSession = security.OpenWithoutLogin(); }
-                        catch (UnauthorizedAccessException)
-                        {
-                            using (var migrationLogin = new LoginForm(security, null, false)) { if (migrationLogin.ShowDialog() != DialogResult.OK) return; activeSession = migrationLogin.Session; }
-                        }
+                        activeSession = security.OpenWithoutLogin();
                     }
-                    else using (var login = new LoginForm(security, null, defaultCreated)) { if (login.ShowDialog() != DialogResult.OK) return; activeSession = login.Session; }
+                    else using (var login = new LoginForm(security, null, false)) { if (login.ShowDialog() != DialogResult.OK) return; activeSession = login.Session; }
 
                     if (activeSession == null) return;
                     using (activeSession)
                     using (var database = new AppDatabase(DataDirectory, activeSession.MaterializeDatabasePassword(), activeSession.DisplayName, activeSession.Role))
                     {
                         security.FlushPendingAudit(database);
-                        if (security.IsLoginRequired && activeSession.UsesDefaultCredentials)
-                            MessageBox.Show("أنت تستخدم بيانات الدخول الافتراضية admin / admin. غيّر كلمة المرور الآن من الإعدادات لحماية سجلات المراجعين.", "تنبيه أمني مهم", MessageBoxButtons.OK, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1, MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
                         Application.Run(new MainForm(database, new BackupService(DataDirectory), security, activeSession));
                     }
                 }
@@ -100,11 +84,8 @@ namespace PatientRecordsSaudi
             try
             {
                 Directory.CreateDirectory(folder);
-                string legacyProbe = Path.Combine(folder, "legacy-probe"), currentProbe = Path.Combine(folder, "current-probe"); Directory.CreateDirectory(legacyProbe); File.WriteAllText(Path.Combine(legacyProbe, "migration.test"), "ok");
-                MigrateLegacyDataOnce(legacyProbe, currentProbe); if (File.ReadAllText(Path.Combine(currentProbe, "migration.test")) != "ok" || !File.Exists(Path.Combine(currentProbe, ".generation-v2"))) return 4;
                 var security = new AppSecurity(folder);
                 if (!security.EnsureDefaultConfiguration()) return 3;
-                security.EnsureDirectStartupForCurrentRelease();
                 if (security.IsLoginRequired) return 5;
                 SecuritySession session = security.OpenWithoutLogin();
                 using (session)
@@ -112,9 +93,10 @@ namespace PatientRecordsSaudi
                 {
                     security.FlushPendingAudit(database);
                     if (!session.IsAdmin || database.CountActivePatients() != 0 || database.GetSettings().NextFileNumber != 1) return 2;
+                    security.AddUser(session, "selfmanager", "مدير الفحص", "مدير", "test1234");
                     security.SetLoginRequired(session, true); if (!security.IsLoginRequired) return 6;
                     bool passwordlessBlocked = false; try { using (SecuritySession invalid = security.OpenWithoutLogin()) { } } catch (UnauthorizedAccessException) { passwordlessBlocked = true; } if (!passwordlessBlocked) return 7;
-                    using (SecuritySession authenticated = security.Login("admin", "admin")) if (!authenticated.IsAdmin) return 8;
+                    using (SecuritySession authenticated = security.Login("selfmanager", "test1234")) if (!authenticated.IsAdmin) return 8;
                     security.SetLoginRequired(session, false); using (SecuritySession reopened = security.OpenWithoutLogin()) if (!reopened.IsAdmin) return 9;
                     database.Checkpoint();
                 }
@@ -130,32 +112,14 @@ namespace PatientRecordsSaudi
             }
         }
 
-        private static void MigrateLegacyDataOnce(string legacyDirectory, string currentDirectory)
+        private static void DisableLegacyAutoStart()
         {
-            if (Directory.Exists(currentDirectory)) return;
-            if (!Directory.Exists(legacyDirectory)) { Directory.CreateDirectory(currentDirectory); return; }
-
-            bool legacyInstanceRunning;
-            using (var legacyMutex = new Mutex(false, @"Local\SaudiPatientRecords_A7904157_8218_4708_9191_D6C477B3940C"))
+            try
             {
-                try { legacyInstanceRunning = !legacyMutex.WaitOne(0); }
-                catch (AbandonedMutexException) { legacyInstanceRunning = false; }
-                if (legacyInstanceRunning) throw new InvalidOperationException("توجد نسخة سابقة تعمل الآن.");
-
-                string stagingDirectory = currentDirectory + ".migrating";
-                if (Directory.Exists(stagingDirectory)) Directory.Delete(stagingDirectory, true);
-                CopyDirectory(legacyDirectory, stagingDirectory);
-                File.WriteAllText(Path.Combine(stagingDirectory, ".generation-v2"), "Saudi Patient Records secure data generation 2");
-                Directory.Move(stagingDirectory, currentDirectory);
-                try { legacyMutex.ReleaseMutex(); } catch (ApplicationException) { }
+                using (RegistryKey run = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true))
+                    if (run != null) run.DeleteValue("SaudiPatientRecords", false);
             }
-        }
-
-        private static void CopyDirectory(string source, string destination)
-        {
-            Directory.CreateDirectory(destination);
-            foreach (string file in Directory.EnumerateFiles(source)) File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), false);
-            foreach (string directory in Directory.EnumerateDirectories(source)) CopyDirectory(directory, Path.Combine(destination, Path.GetFileName(directory)));
+            catch { }
         }
 
         private static void LogUnexpectedError(Exception exception, string area)

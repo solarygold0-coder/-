@@ -13,7 +13,7 @@ namespace PatientRecordsSaudi.UI
         {
             this.security = security; this.session = session; Text = "حسابات الموظفين والصلاحيات"; RightToLeft = RightToLeft.Yes; RightToLeftLayout = true; Font = UiKit.NormalFont; StartPosition = FormStartPosition.CenterParent; Size = new Size(760, 520); BackColor = UiKit.Background;
             var tools = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 58, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(6) };
-            tools.Controls.Add(UiKit.Button("إضافة موظف", AddUser, false)); tools.Controls.Add(UiKit.Button("إعادة تعيين كلمة المرور", ResetPassword, false)); tools.Controls.Add(UiKit.Button("تفعيل/تعطيل", ToggleUser, true)); Controls.Add(tools);
+            tools.Controls.Add(UiKit.Button("إضافة مستخدم", AddUser, false)); tools.Controls.Add(UiKit.Button("إعادة تعيين كلمة المرور", ResetPassword, false)); tools.Controls.Add(UiKit.Button("تفعيل/تعطيل", ToggleUser, true)); Controls.Add(tools);
             UiKit.AddTextColumn(grid, "Username", "اسم المستخدم", 25); UiKit.AddTextColumn(grid, "DisplayName", "اسم الموظف", 35); UiKit.AddTextColumn(grid, "Role", "الصلاحية", 22); UiKit.AddTextColumn(grid, "StatusText", "الحالة", 18); Controls.Add(grid); grid.BringToFront(); LoadUsers();
         }
         private SecurityUserInfo Selected() { return grid.CurrentRow == null ? null : grid.CurrentRow.DataBoundItem as SecurityUserInfo; }
