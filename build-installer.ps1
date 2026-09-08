@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$Runtime = "win-x64",
-    [string]$Version = "4.2.0"
+    [string]$Version = "4.2.1"
 )
 
 $ErrorActionPreference = "Stop"

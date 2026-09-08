@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
 using PatientRecordsSaudi.Models;
 using PatientRecordsSaudi.Services;
@@ -42,6 +44,12 @@ namespace PatientRecordsSaudi.Tests
                     defaultSecurity.ChangePassword(defaultSession, "admin", "safe1234"); Assert(!defaultSession.UsesDefaultCredentials, "Default credential warning clears after password change");
                 }
                 using (SecuritySession changedSession = defaultSecurity.Login("admin", "safe1234")) Assert(changedSession.IsAdmin, "Customized admin password works");
+
+                string upgradeFolder = Path.Combine(temp, "upgrade-login"); Directory.CreateDirectory(upgradeFolder); var previousSecurity = new AppSecurity(upgradeFolder); previousSecurity.EnsureDefaultConfiguration();
+                using (SecuritySession previousAdmin = previousSecurity.Login("admin", "admin")) previousSecurity.SetLoginRequired(previousAdmin, true);
+                string upgradeAuthPath = Path.Combine(upgradeFolder, "auth.dat"); byte[] oldPlain = ProtectedData.Unprotect(File.ReadAllBytes(upgradeAuthPath), null, DataProtectionScope.CurrentUser); JsonNode oldStore = JsonNode.Parse(oldPlain); oldStore["StartupPolicyRevision"] = 0; File.WriteAllBytes(upgradeAuthPath, ProtectedData.Protect(System.Text.Encoding.UTF8.GetBytes(oldStore.ToJsonString()), null, DataProtectionScope.CurrentUser)); CryptographicOperations.ZeroMemory(oldPlain);
+                var upgradedSecurity = new AppSecurity(upgradeFolder); Assert(upgradedSecurity.IsLoginRequired, "Previous installation can contain inherited startup login"); Assert(upgradedSecurity.EnsureDirectStartupForCurrentRelease(), "Upgrade disables inherited startup login exactly once"); Assert(!upgradedSecurity.IsLoginRequired, "Upgraded application opens directly");
+                using (SecuritySession upgradedAdmin = upgradedSecurity.OpenWithoutLogin()) { upgradedSecurity.SetLoginRequired(upgradedAdmin, true); Assert(!upgradedSecurity.EnsureDirectStartupForCurrentRelease() && upgradedSecurity.IsLoginRequired, "Later administrator choice to enable login is preserved"); }
 
                 string adminPassword = "test1234", employeePassword = "empl1234";
                 var security = new AppSecurity(temp); bool invalidPasswordBlocked = false; try { security.Configure("مدير الاختبار", "UPPER1"); } catch (ArgumentException) { invalidPasswordBlocked = true; } Assert(invalidPasswordBlocked, "Custom password policy rejects uppercase and requires lowercase letters plus digits"); SecuritySession admin = security.Configure("مدير الاختبار", adminPassword);

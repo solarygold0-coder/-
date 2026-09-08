@@ -61,6 +61,7 @@ namespace PatientRecordsSaudi
                 {
                     var security = new AppSecurity(DataDirectory);
                     bool defaultCreated = security.EnsureDefaultConfiguration();
+                    security.EnsureDirectStartupForCurrentRelease();
                     SecuritySession activeSession = null;
                     if (!security.IsLoginRequired)
                     {
@@ -103,6 +104,7 @@ namespace PatientRecordsSaudi
                 MigrateLegacyDataOnce(legacyProbe, currentProbe); if (File.ReadAllText(Path.Combine(currentProbe, "migration.test")) != "ok" || !File.Exists(Path.Combine(currentProbe, ".generation-v2"))) return 4;
                 var security = new AppSecurity(folder);
                 if (!security.EnsureDefaultConfiguration()) return 3;
+                security.EnsureDirectStartupForCurrentRelease();
                 if (security.IsLoginRequired) return 5;
                 SecuritySession session = security.OpenWithoutLogin();
                 using (session)

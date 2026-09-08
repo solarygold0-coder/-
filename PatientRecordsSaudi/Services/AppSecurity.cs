@@ -42,6 +42,7 @@ namespace PatientRecordsSaudi.Services
         public SecurityStore() { }
         public int Version { get; set; }
         public bool LoginRequired { get; set; }
+        public int StartupPolicyRevision { get; set; }
         public List<SecurityUserRecord> Users { get; set; }
     }
 
@@ -87,7 +88,7 @@ namespace PatientRecordsSaudi.Services
             byte[] dbKey = RandomBytes(32);
             try
             {
-                var store = new SecurityStore { Version = 2, LoginRequired = false, Users = new List<SecurityUserRecord>() };
+                var store = new SecurityStore { Version = 2, LoginRequired = false, StartupPolicyRevision = 421, Users = new List<SecurityUserRecord>() };
                 store.Users.Add(CreateRecord("admin", "مدير النظام", "مدير", "admin", Convert.ToBase64String(dbKey)));
                 SaveStore(store); SaveDeviceKey(Convert.ToBase64String(dbKey)); TryLog("admin", "إعداد الحماية", "إنشاء الحساب الافتراضي؛ تسجيل الدخول اختياري");
                 return true;
@@ -100,7 +101,7 @@ namespace PatientRecordsSaudi.Services
             if (IsConfigured) throw new InvalidOperationException("تم إعداد الحماية مسبقًا.");
             ValidatePassword(password);
             byte[] dbKey = RandomBytes(32); string dbPassword = Convert.ToBase64String(dbKey);
-            var store = new SecurityStore { Version = 2, LoginRequired = false, Users = new List<SecurityUserRecord>() };
+            var store = new SecurityStore { Version = 2, LoginRequired = false, StartupPolicyRevision = 421, Users = new List<SecurityUserRecord>() };
             store.Users.Add(CreateRecord("admin", CleanDisplayName(displayName), "مدير", password, dbPassword));
             SaveStore(store); SaveDeviceKey(dbPassword); TryLog("admin", "إعداد الحماية", "إنشاء حساب المدير الأول");
             return new SecuritySession { Username = "admin", DisplayName = CleanDisplayName(displayName), Role = "مدير", DatabaseKeyBytes = dbKey };
@@ -122,6 +123,19 @@ namespace PatientRecordsSaudi.Services
             catch (InvalidDataException) { throw new UnauthorizedAccessException("يلزم إدخال بيانات المدير مرة واحدة لإعادة حماية مفتاح قاعدة البيانات لهذا المستخدم في Windows."); }
             TryLog(admin.Username, "فتح بدون تسجيل دخول", "الحماية الاختيارية غير مفعلة");
             return new SecuritySession { Username = admin.Username, DisplayName = admin.DisplayName, Role = "مدير", DatabaseKeyBytes = key, UsesDefaultCredentials = false };
+        }
+
+        public bool EnsureDirectStartupForCurrentRelease()
+        {
+            if (!IsConfigured || IsLegacyTwoLineFile()) return false;
+            SecurityStore store = LoadStore();
+            if (store.StartupPolicyRevision >= 421) return false;
+            bool changed = store.LoginRequired;
+            store.LoginRequired = false;
+            store.StartupPolicyRevision = 421;
+            SaveStore(store);
+            TryLog("admin", "تصحيح سياسة بدء التشغيل", "تعطيل طلب الدخول الموروث مرة واحدة في الإصدار 4.2.1");
+            return changed;
         }
 
         public void SetLoginRequired(SecuritySession session, bool required)
@@ -197,7 +211,7 @@ namespace PatientRecordsSaudi.Services
             byte[] salt = Convert.FromBase64String(lines[0]), expected = Convert.FromBase64String(lines[1]), actual = Derive(password ?? "", salt, expected.Length);
             if (!FixedEquals(expected, actual)) throw new UnauthorizedAccessException("اسم المستخدم أو كلمة المرور غير صحيحة.");
             string dbPassword = Convert.ToBase64String(Derive("DB|" + password, salt, 32));
-            var store = new SecurityStore { Version = 2, LoginRequired = false, Users = new List<SecurityUserRecord> { CreateRecord("admin", "مدير النظام", "مدير", password, dbPassword) } };
+            var store = new SecurityStore { Version = 2, LoginRequired = false, StartupPolicyRevision = 421, Users = new List<SecurityUserRecord> { CreateRecord("admin", "مدير النظام", "مدير", password, dbPassword) } };
             SaveStore(store); SaveDeviceKey(dbPassword); TryLog("admin", "ترقية ملف الحماية", "الانتقال إلى تنسيق الحسابات الجديد"); return Session(store.Users[0], dbPassword, false);
         }
 
