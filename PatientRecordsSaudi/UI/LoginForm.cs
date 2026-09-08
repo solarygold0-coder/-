@@ -21,7 +21,7 @@ namespace PatientRecordsSaudi.UI
             var panel = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(28), ColumnCount = 1, AutoScroll = true };
             if (setupMode) { panel.Controls.Add(UiKit.Label("اسم مدير النظام", true)); panel.Controls.Add(displayName); }
             panel.Controls.Add(UiKit.Label("اسم المستخدم", true)); panel.Controls.Add(username); username.Text = string.IsNullOrEmpty(expectedUsername) ? "admin" : expectedUsername; username.ReadOnly = !string.IsNullOrEmpty(expectedUsername);
-            panel.Controls.Add(UiKit.Label(setupMode ? "أنشئ كلمة مرور قوية من 8 خانات على الأقل" : "كلمة المرور", true)); password.UseSystemPasswordChar = true; panel.Controls.Add(password);
+            panel.Controls.Add(UiKit.Label(setupMode ? "كلمة مرور من 10 خانات تشمل حرفًا ورقمًا ورمزًا" : "كلمة المرور", true)); password.UseSystemPasswordChar = true; panel.Controls.Add(password);
             if (setupMode) { panel.Controls.Add(UiKit.Label("تأكيد كلمة المرور", false)); confirm.UseSystemPasswordChar = true; panel.Controls.Add(confirm); }
             var login = UiKit.Button(setupMode ? "حفظ وبدء الاستخدام" : "دخول", OnLogin, false); login.Dock = DockStyle.Top; panel.Controls.Add(login); Controls.Add(panel); AcceptButton = login;
         }

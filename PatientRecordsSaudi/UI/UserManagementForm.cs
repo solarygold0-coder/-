@@ -30,7 +30,7 @@ namespace PatientRecordsSaudi.UI
         public UserEditorDialog()
         {
             Text = "إضافة حساب موظف"; RightToLeft = RightToLeft.Yes; RightToLeftLayout = true; StartPosition = FormStartPosition.CenterParent; ClientSize = new Size(460, 390); Font = UiKit.NormalFont; BackColor = UiKit.Background;
-            var t = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(24), ColumnCount = 1 }; t.Controls.Add(UiKit.Label("اسم المستخدم", true)); t.Controls.Add(username); t.Controls.Add(UiKit.Label("اسم الموظف", true)); t.Controls.Add(display); t.Controls.Add(UiKit.Label("الصلاحية", true)); t.Controls.Add(role); t.Controls.Add(UiKit.Label("كلمة المرور (8 خانات على الأقل)", true)); password.UseSystemPasswordChar = true; t.Controls.Add(password); t.Controls.Add(UiKit.Label("تأكيد كلمة المرور", false)); confirm.UseSystemPasswordChar = true; t.Controls.Add(confirm);
+            var t = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(24), ColumnCount = 1 }; t.Controls.Add(UiKit.Label("اسم المستخدم", true)); t.Controls.Add(username); t.Controls.Add(UiKit.Label("اسم الموظف", true)); t.Controls.Add(display); t.Controls.Add(UiKit.Label("الصلاحية", true)); t.Controls.Add(role); t.Controls.Add(UiKit.Label("كلمة المرور (10 خانات، حرف ورقم ورمز)", true)); password.UseSystemPasswordChar = true; t.Controls.Add(password); t.Controls.Add(UiKit.Label("تأكيد كلمة المرور", false)); confirm.UseSystemPasswordChar = true; t.Controls.Add(confirm);
             var save = UiKit.Button("حفظ الحساب", Save, false); t.Controls.Add(save); Controls.Add(t); AcceptButton = save;
         }
         private void Save(object sender, EventArgs e) { if (password.Text != confirm.Text) { UiKit.ShowError("كلمتا المرور غير متطابقتين."); return; } if (Username.Length < 3 || DisplayName.Length < 2) { UiKit.ShowError("تحقق من اسم المستخدم واسم الموظف."); return; } DialogResult = DialogResult.OK; Close(); }
@@ -44,7 +44,7 @@ namespace PatientRecordsSaudi.UI
             Text = title; RightToLeft = RightToLeft.Yes; RightToLeftLayout = true; StartPosition = FormStartPosition.CenterParent; ClientSize = new Size(430, 260); Font = UiKit.NormalFont; BackColor = UiKit.Background;
             var t = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(24), ColumnCount = 1 }; t.Controls.Add(UiKit.Label("كلمة المرور", true)); password.UseSystemPasswordChar = true; t.Controls.Add(password); t.Controls.Add(UiKit.Label("التأكيد", true)); confirm.UseSystemPasswordChar = true; t.Controls.Add(confirm); var save = UiKit.Button("حفظ", Save, false); t.Controls.Add(save); Controls.Add(t); AcceptButton = save;
         }
-        private void Save(object sender, EventArgs e) { if (password.Text.Length < 8) { UiKit.ShowError("كلمة المرور يجب ألا تقل عن 8 خانات."); return; } if (password.Text != confirm.Text) { UiKit.ShowError("كلمتا المرور غير متطابقتين."); return; } DialogResult = DialogResult.OK; Close(); }
+        private void Save(object sender, EventArgs e) { if (password.Text.Length < 10) { UiKit.ShowError("كلمة المرور يجب ألا تقل عن 10 خانات."); return; } if (password.Text != confirm.Text) { UiKit.ShowError("كلمتا المرور غير متطابقتين."); return; } DialogResult = DialogResult.OK; Close(); }
     }
 
     public sealed class ChangePasswordDialog : Form

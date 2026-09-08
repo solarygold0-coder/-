@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
 using PatientRecordsSaudi.Models;
 using PatientRecordsSaudi.Services;
@@ -10,12 +11,12 @@ namespace PatientRecordsSaudi.UI
     {
         private readonly AppDatabase database; private readonly PatientTask original; private Patient patient;
         private readonly TextBox fileNumber = UiKit.TextBox(12), patientName = UiKit.TextBox(150), title = UiKit.TextBox(150), notes = UiKit.TextBox(1000);
-        private readonly ComboBox priority = UiKit.Combo("عادية", "عالية", "عاجلة"), completed = UiKit.Combo("مفتوحة", "مكتملة");
+        private readonly ComboBox priority = UiKit.Combo(), completed = UiKit.Combo("مفتوحة", "مكتملة");
         private readonly DateTimeScrollControl due = new DateTimeScrollControl(true);
         public PatientTask Result { get; private set; }
         public TaskForm(AppDatabase database, PatientTask task, long? initialFileNumber)
         {
-            this.database = database; original = task; Text = task == null ? "مهمة/تنبيه جديد" : "تعديل المهمة/التنبيه";
+            this.database = database; original = task; priority.Items.AddRange(database.GetSettings().TaskPriorities.ToArray()); if (priority.Items.Count > 0) priority.SelectedIndex = 0; Text = task == null ? "مهمة/تنبيه جديد" : "تعديل المهمة/التنبيه";
             RightToLeft = RightToLeft.Yes; RightToLeftLayout = true; Font = UiKit.NormalFont; StartPosition = FormStartPosition.CenterParent; Size = new Size(680, 500); BackColor = UiKit.Background;
             Controls.Add(new Label { Text = Text, Dock = DockStyle.Top, Height = 50, BackColor = UiKit.Primary, ForeColor = Color.White, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Tahoma", 14, FontStyle.Bold) });
             var table = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(18), ColumnCount = 2, AutoScroll = true };
@@ -40,6 +41,6 @@ namespace PatientRecordsSaudi.UI
             Result = original ?? new PatientTask(); Result.PatientId = patient.Id; Result.FileNumber = patient.FileNumber; Result.PatientName = patient.FullName; Result.Title = title.Text.Trim(); Result.DueAt = due.Value; Result.Priority = priority.Text; Result.IsCompleted = completed.SelectedIndex == 1; Result.Notes = notes.Text.Trim();
             DialogResult = DialogResult.OK; Close();
         }
-        private void LoadTask(PatientTask t) { fileNumber.Text = t.FileNumber.ToString(); Resolve(false); title.Text = t.Title; due.Value = t.DueAt; priority.SelectedItem = t.Priority; completed.SelectedIndex = t.IsCompleted ? 1 : 0; notes.Text = t.Notes; }
+        private void LoadTask(PatientTask t) { if (!priority.Items.Contains(t.Priority)) priority.Items.Add(t.Priority); fileNumber.Text = t.FileNumber.ToString(); Resolve(false); title.Text = t.Title; due.Value = t.DueAt; priority.SelectedItem = t.Priority; completed.SelectedIndex = t.IsCompleted ? 1 : 0; notes.Text = t.Notes; }
     }
 }

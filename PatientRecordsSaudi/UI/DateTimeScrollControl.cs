@@ -20,14 +20,16 @@ namespace PatientRecordsSaudi.UI
             this.includeTime = includeTime; Height = includeTime ? 70 : 36; Dock = DockStyle.Fill; RightToLeft = RightToLeft.Yes;
             var flow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, AutoScroll = false };
             SetupCombo(day, 68); SetupCombo(month, 135); SetupCombo(year, 82);
+            day.AccessibleName = "اليوم الميلادي"; month.AccessibleName = "الشهر الميلادي"; year.AccessibleName = "السنة الميلادية";
             for (int i = 1; i <= 31; i++) day.Items.Add(i.ToString("00"));
             for (int i = 1; i <= 12; i++) month.Items.Add(SaudiValidation.MonthLabel(i));
             int current = DateTime.Today.Year;
-            for (int i = current - 120; i <= current + 10; i++) year.Items.Add(i.ToString());
+            for (int i = current - 130; i <= current + 20; i++) year.Items.Add(i.ToString());
             flow.Controls.Add(year); flow.Controls.Add(month); flow.Controls.Add(day);
             if (includeTime)
             {
                 SetupCombo(period, 64); SetupCombo(minute, 62); SetupCombo(hour, 62);
+                period.AccessibleName = "الفترة صباحًا أو مساءً"; minute.AccessibleName = "الدقيقة"; hour.AccessibleName = "الساعة";
                 period.Items.AddRange(new object[] { "ص", "م" });
                 for (int i = 0; i < 60; i += 5) minute.Items.Add(i.ToString("00"));
                 for (int i = 1; i <= 12; i++) hour.Items.Add(i.ToString("00"));
@@ -62,6 +64,7 @@ namespace PatientRecordsSaudi.UI
             }
             set
             {
+                if (!year.Items.Contains(value.Year.ToString())) year.Items.Add(value.Year.ToString());
                 year.SelectedItem = value.Year.ToString(); month.SelectedIndex = value.Month - 1; day.SelectedIndex = value.Day - 1;
                 if (includeTime)
                 {
