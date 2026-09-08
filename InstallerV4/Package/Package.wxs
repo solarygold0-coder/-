@@ -23,7 +23,7 @@
               <Shortcut Id="DesktopShortcut" Directory="DesktopFolder" Name="سجلات المراجعين" Description="نظام إدارة سجلات المراجعين" WorkingDirectory="INSTALLFOLDER" Advertise="no" />
             </File>
             <RegistryValue Root="HKCU" Key="Software\Mohammed Mousa Asiri\Saudi Patient Records V5" Name="InstallPath" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
-            <RemoveRegistryValue Id="RemoveLegacyAutoStart" Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="SaudiPatientRecords" Action="removeOnInstall" />
+            <RemoveRegistryValue Id="RemoveLegacyAutoStart" Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="SaudiPatientRecords" />
             <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
             <RemoveFolder Id="RemoveLocalProgramsFolder" Directory="LocalProgramsFolder" On="uninstall" />
           </Component>
