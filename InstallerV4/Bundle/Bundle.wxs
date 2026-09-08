@@ -10,7 +10,7 @@
       <bal:WixInternalUIBootstrapperApplication Theme="standard" />
     </BootstrapperApplication>
     <Chain>
-      <MsiPackage SourceFile="$(var.MsiPath)" DisplayInternalUI="yes" Compressed="yes" Vital="yes" bal:PrimaryPackageType="x64" />
+      <MsiPackage SourceFile="$(var.MsiPath)" Compressed="yes" Vital="yes" bal:PrimaryPackageType="x64" />
     </Chain>
   </Bundle>
 </Wix>
