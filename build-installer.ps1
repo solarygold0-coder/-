@@ -71,7 +71,7 @@ $standaloneHash = (Get-FileHash $standaloneOut -Algorithm SHA256).Hash.ToLowerIn
     "InstallScope=Per-user"
     "DefaultUsername=admin"
     "DefaultPassword=admin (change immediately)"
-    "DigitalSignature=None (personal build requested by owner)"
+    "DigitalSignature=None (unsigned public-source build)"
     "SetupSHA256=$setupHash"
     "StandaloneSHA256=$standaloneHash"
 ) | Out-File (Join-Path $release "BUILD-INFO.txt") -Encoding utf8

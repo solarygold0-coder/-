@@ -57,7 +57,7 @@ $size = (Get-Item $releaseExe).Length
     "Architecture=x64"
     "Packaging=Unpackaged Win32 single-file EXE"
     "Runtime=.NET 10 self-contained"
-    "DigitalSignature=None (requested personal build)"
+    "DigitalSignature=None (unsigned public-source build)"
     "SizeBytes=$size"
     "SHA256=$hash"
 ) | Out-File (Join-Path $release "BUILD-INFO.txt") -Encoding utf8
