@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build-test-publish:
-    runs-on: windows-2025
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
 
@@ -37,7 +37,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Saudi-Patient-Records-Standalone-EXE-v4.1.0
+          name: Saudi-Patient-Records-Standalone-EXE-v4.1.1
           if-no-files-found: error
           compression-level: 0
           path: release-standalone/**

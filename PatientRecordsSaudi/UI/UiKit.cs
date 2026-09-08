@@ -94,5 +94,11 @@ namespace PatientRecordsSaudi.UI
             return MessageBox.Show(message, title, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2,
                 MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign) == DialogResult.Yes;
         }
+
+        public static void DisposeResources()
+        {
+            NormalFont.Dispose();
+            BoldFont.Dispose();
+        }
     }
 }

@@ -41,14 +41,14 @@ namespace PatientRecordsSaudi.Tests
                 bool overLimitBlocked = false; try { security.AddUser(admin, "baduser", "مستخدم غير صالح", "موظف", "abcde1234"); } catch (ArgumentException) { overLimitBlocked = true; } Assert(overLimitBlocked, "Custom password policy enforces four-letter maximum");
                 security.AddUser(admin, "employee", "موظف الاختبار", "موظف", employeePassword); SecuritySession employee = security.Login("employee", employeePassword);
                 Assert(employee.DisplayName == "موظف الاختبار" && !employee.IsAdmin, "Per-user login and role");
-                string lockPassword = "lock1234", wrongPassword = "fail1234"; security.AddUser(admin, "locktest", "اختبار القفل", "موظف", lockPassword); for (int i = 0; i < 5; i++) try { security.Login("locktest", wrongPassword); } catch (UnauthorizedAccessException) { }
-                bool lockedOut = false; try { security.Login("locktest", lockPassword); } catch (UnauthorizedAccessException) { lockedOut = true; } Assert(lockedOut, "Temporary lockout after repeated failures");
+                string retryPassword = "lock1234", wrongPassword = "fail1234"; security.AddUser(admin, "retrytest", "اختبار تكرار المحاولة", "موظف", retryPassword); for (int i = 0; i < 12; i++) try { security.Login("retrytest", wrongPassword); } catch (UnauthorizedAccessException) { }
+                using (SecuritySession retrySession = security.Login("retrytest", retryPassword)) Assert(!retrySession.IsAdmin, "Repeated incorrect passwords never disable or lock the application account");
                 Assert(!File.Exists(Path.Combine(temp, "auth.dat.bak")), "Obsolete authentication backup is not retained");
                 Assert(File.ReadAllBytes(Path.Combine(temp, "auth.dat"))[0] != (byte)'{', "Authentication store is protected with Windows DPAPI");
 
                 using (var db = new AppDatabase(temp, admin.MaterializeDatabasePassword(), admin.DisplayName))
                 {
-                    security.FlushPendingAudit(db); Assert(db.GetAllAudit().Exists(x => x.EntityType == "Security"), "Security events are imported into audit log");
+                    security.FlushPendingAudit(db); Assert(db.GetRecentAudit(100).Exists(x => x.EntityType == "Security"), "Security events are imported into audit log");
                     Patient one = db.AddPatient(NewPatient(id1, "مراجع الاختبار الأول", TestMobile(1)));
                     Patient two = db.AddPatient(NewPatient(id2, "مراجع الاختبار الثاني", TestMobile(2)));
                     Assert(one.FileNumber == 1 && two.FileNumber == 2, "Sequential file numbering starts at 1");

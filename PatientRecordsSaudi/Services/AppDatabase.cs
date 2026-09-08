@@ -17,6 +17,8 @@ namespace PatientRecordsSaudi.Services
     public sealed class AppDatabase : IDisposable
     {
         public const int MaxPatients = 10000;
+        public const int DefaultPatientListLimit = 500;
+        public const int MaxAuditEntries = 50000;
         public const long MaxAttachmentBytes = 10L * 1024L * 1024L;
         private static readonly string[] AllowedAttachmentExtensions = { ".pdf", ".jpg", ".jpeg", ".png", ".docx" };
         private const string TemporaryAttachmentPrefix = "SaudiPatientRecordsView_";
@@ -43,23 +45,31 @@ namespace PatientRecordsSaudi.Services
 
         private void EnsureSchema()
         {
-            var patients = db.GetCollection<Patient>("patients"); patients.EnsureIndex(x => x.FileNumber, true); patients.EnsureIndex(x => x.NationalId, true); patients.EnsureIndex(x => x.FullName); patients.EnsureIndex(x => x.NormalizedName); patients.EnsureIndex(x => x.Mobile); patients.EnsureIndex(x => x.City); patients.EnsureIndex(x => x.IsArchived);
+            var patients = db.GetCollection<Patient>("patients"); patients.EnsureIndex(x => x.FileNumber, true); patients.EnsureIndex(x => x.NationalId, true); patients.EnsureIndex(x => x.FullName); patients.EnsureIndex(x => x.NormalizedName); patients.EnsureIndex(x => x.Mobile); patients.EnsureIndex(x => x.City); patients.EnsureIndex(x => x.DateOfBirth); patients.EnsureIndex(x => x.IsArchived);
             var appointments = db.GetCollection<Appointment>("appointments"); appointments.EnsureIndex(x => x.PatientId); appointments.EnsureIndex(x => x.FileNumber); appointments.EnsureIndex(x => x.StartsAt); appointments.EnsureIndex(x => x.IsDeleted);
             var tasks = db.GetCollection<PatientTask>("tasks"); tasks.EnsureIndex(x => x.PatientId); tasks.EnsureIndex(x => x.FileNumber); tasks.EnsureIndex(x => x.DueAt); tasks.EnsureIndex(x => x.IsDeleted);
             var attachments = db.GetCollection<PatientAttachment>("attachments"); attachments.EnsureIndex(x => x.PatientId); attachments.EnsureIndex(x => x.FileNumber); attachments.EnsureIndex(x => x.IsDeleted);
+            var audit = db.GetCollection<AuditEntry>("audit"); audit.EnsureIndex(x => x.OccurredAt);
             db.GetCollection<ClosureDate>("closures").EnsureIndex(x => x.Date, true);
             var settings = db.GetCollection<AppSettings>("settings"); AppSettings s = settings.FindById(1);
             if (s == null) settings.Insert(DefaultSettings());
             else
             {
-                bool changed = false; if (s.WorkDayStartMinutes <= 0) { s.WorkDayStartMinutes = 8 * 60; changed = true; } if (s.WorkDayEndMinutes <= s.WorkDayStartMinutes) { s.WorkDayEndMinutes = 17 * 60; changed = true; }
-                if (s.BackupIntervalHours <= 0) { s.BackupIntervalHours = 4; changed = true; } if (s.LastBackupStatus == null) { s.LastBackupStatus = "لم تُنشأ نسخة بعد"; changed = true; } if (changed) settings.Update(s);
-                changed |= EnsureLookups(s); if (changed) settings.Update(s);
+                bool changed = EnsureSettingsDefaults(s); if (changed) settings.Update(s);
             }
             foreach (Patient p in patients.Find(x => x.NormalizedName == null || x.NormalizedName == "").ToList()) { p.NormalizedName = SaudiValidation.NormalizeArabicName(p.FullName); patients.Update(p); }
+            AppSettings currentSettings = settings.FindById(1); Patient highestPatient = patients.Find(Query.All("FileNumber", Query.Descending), 0, 1).FirstOrDefault(); long highestFileNumber = highestPatient == null ? 0 : highestPatient.FileNumber;
+            if (currentSettings != null && currentSettings.NextFileNumber <= highestFileNumber) { currentSettings.NextFileNumber = highestFileNumber + 1; currentSettings.UpdatedAt = DateTime.Now; settings.Update(currentSettings); }
+            TrimAuditIfNeeded(audit);
         }
 
-        public AppSettings GetSettings() { return db.GetCollection<AppSettings>("settings").FindById(1); }
+        public AppSettings GetSettings()
+        {
+            var collection = db.GetCollection<AppSettings>("settings"); AppSettings settings = collection.FindById(1);
+            if (settings == null) { settings = DefaultSettings(); collection.Insert(settings); return settings; }
+            if (EnsureSettingsDefaults(settings)) collection.Update(settings);
+            return settings;
+        }
         public void SaveSettings(AppSettings settings)
         {
             RequireAdmin(); if (settings == null) throw new ArgumentNullException("settings");
@@ -88,8 +98,25 @@ namespace PatientRecordsSaudi.Services
 
         private static AppSettings DefaultSettings()
         {
-            var s = new AppSettings { Id = 1, NextFileNumber = 1, ClinicName = "المنشأة", DefaultAppointmentMinutes = 30, WorkDayStartMinutes = 8 * 60, WorkDayEndMinutes = 17 * 60, BackupIntervalHours = 4, LastBackupStatus = "لم تُنشأ نسخة بعد", UpdatedAt = DateTime.Now };
+            var s = new AppSettings { Id = 1, NextFileNumber = 1, ClinicName = "المنشأة", ClinicPhone = "", ClinicAddress = "", ClinicLogoStoredId = "", ClinicLogoFileName = "", DefaultAppointmentMinutes = 30, WorkDayStartMinutes = 8 * 60, WorkDayEndMinutes = 17 * 60, BackupIntervalHours = 4, AutoBackupDirectory = "", LastBackupStatus = "لم تُنشأ نسخة بعد", UpdatedAt = DateTime.Now };
             EnsureLookups(s); return s;
+        }
+        private static bool EnsureSettingsDefaults(AppSettings s)
+        {
+            bool changed = false;
+            if (s.NextFileNumber < 1) { s.NextFileNumber = 1; changed = true; }
+            if (string.IsNullOrWhiteSpace(s.ClinicName)) { s.ClinicName = "المنشأة"; changed = true; }
+            if (s.ClinicPhone == null) { s.ClinicPhone = ""; changed = true; }
+            if (s.ClinicAddress == null) { s.ClinicAddress = ""; changed = true; }
+            if (s.ClinicLogoStoredId == null) { s.ClinicLogoStoredId = ""; changed = true; }
+            if (s.ClinicLogoFileName == null) { s.ClinicLogoFileName = ""; changed = true; }
+            if (s.AutoBackupDirectory == null) { s.AutoBackupDirectory = ""; changed = true; }
+            if (s.DefaultAppointmentMinutes <= 0) { s.DefaultAppointmentMinutes = 30; changed = true; }
+            if (s.WorkDayStartMinutes <= 0) { s.WorkDayStartMinutes = 8 * 60; changed = true; }
+            if (s.WorkDayEndMinutes <= s.WorkDayStartMinutes) { s.WorkDayEndMinutes = 17 * 60; changed = true; }
+            if (s.BackupIntervalHours <= 0) { s.BackupIntervalHours = 4; changed = true; }
+            if (s.LastBackupStatus == null) { s.LastBackupStatus = "لم تُنشأ نسخة بعد"; changed = true; }
+            changed |= EnsureLookups(s); return changed;
         }
         private static bool EnsureLookups(AppSettings s)
         {
@@ -117,7 +144,7 @@ namespace PatientRecordsSaudi.Services
         {
             RequireWrite();
             if (patient == null) throw new ArgumentNullException("patient"); if (CountAllPatients() >= MaxPatients) throw new InvalidOperationException("وصل النظام إلى الحد الإداري المحدد وهو 10,000 مراجع.");
-            patient.NationalId = SaudiValidation.NormalizeDigits(patient.NationalId); patient.Mobile = SaudiValidation.NormalizeSaudiMobile(patient.Mobile); patient.NormalizedName = SaudiValidation.NormalizeArabicName(patient.FullName);
+            patient.NationalId = SaudiValidation.NormalizeDigits(patient.NationalId); patient.Mobile = SaudiValidation.NormalizeSaudiMobile(patient.Mobile); patient.NormalizedName = SaudiValidation.NormalizeArabicName(patient.FullName); if (patient.DateOfBirth.HasValue) patient.DateOfBirth = patient.DateOfBirth.Value.Date;
             if (FindByNationalId(patient.NationalId, true) != null) throw new InvalidOperationException("يوجد مراجع مسجل مسبقًا بنفس رقم الهوية/الإقامة.");
             Patient likely = FindLikelyDuplicate(patient.FullName, patient.DateOfBirth, patient.Mobile, null); if (likely != null) throw new DuplicatePatientException(likely);
             db.BeginTrans(); try
@@ -133,7 +160,7 @@ namespace PatientRecordsSaudi.Services
             RequireWrite(); if (patient == null) throw new ArgumentNullException("patient");
             Patient existing = GetPatient(patient.Id); if (existing == null) throw new InvalidOperationException("تعذر العثور على ملف المراجع.");
             if (existing.IsArchived) throw new InvalidOperationException("الملف مؤرشف ولا يمكن تعديله قبل استعادته بواسطة المدير.");
-            patient.NationalId = SaudiValidation.NormalizeDigits(patient.NationalId); patient.Mobile = SaudiValidation.NormalizeSaudiMobile(patient.Mobile); patient.NormalizedName = SaudiValidation.NormalizeArabicName(patient.FullName);
+            patient.NationalId = SaudiValidation.NormalizeDigits(patient.NationalId); patient.Mobile = SaudiValidation.NormalizeSaudiMobile(patient.Mobile); patient.NormalizedName = SaudiValidation.NormalizeArabicName(patient.FullName); if (patient.DateOfBirth.HasValue) patient.DateOfBirth = patient.DateOfBirth.Value.Date;
             Patient sameId = FindByNationalId(patient.NationalId, true); if (sameId != null && sameId.Id != patient.Id) throw new InvalidOperationException("رقم الهوية/الإقامة مستخدم في ملف آخر رقم " + sameId.FileNumber + ".");
             Patient likely = FindLikelyDuplicate(patient.FullName, patient.DateOfBirth, patient.Mobile, patient.Id); if (likely != null) throw new DuplicatePatientException(likely);
             db.BeginTrans(); try { patient.UpdatedAt = DateTime.Now; if (!db.GetCollection<Patient>("patients").Update(patient)) throw new InvalidOperationException("تعذر العثور على ملف المراجع."); SyncPatientSnapshot(patient); AuditInternal("تعديل مراجع", "Patient", patient.Id.ToString(), patient.FileNumber, patient.FullName); db.Commit(); db.Checkpoint(); } catch { db.Rollback(); throw; }
@@ -172,7 +199,7 @@ namespace PatientRecordsSaudi.Services
             string normalized = SaudiValidation.NormalizeArabicName(name), phone = SaudiValidation.NormalizeSaudiMobile(mobile); var collection = db.GetCollection<Patient>("patients"); var candidates = new Dictionary<Guid, Patient>();
             foreach (Patient p in collection.Find(x => x.NormalizedName == normalized)) candidates[p.Id] = p;
             if (!string.IsNullOrEmpty(phone)) foreach (Patient p in collection.Find(x => x.Mobile == phone)) candidates[p.Id] = p;
-            if (birth.HasValue) foreach (Patient p in collection.FindAll().Where(x => x.DateOfBirth.HasValue && x.DateOfBirth.Value.Date == birth.Value.Date)) candidates[p.Id] = p;
+            if (birth.HasValue) { DateTime date = birth.Value.Date; foreach (Patient p in collection.Find(Query.And(Query.GTE("DateOfBirth", date), Query.LT("DateOfBirth", date.AddDays(1))))) candidates[p.Id] = p; }
             return candidates.Values.FirstOrDefault(p =>
             {
                 if (exceptId.HasValue && p.Id == exceptId.Value) return false; string existingName = SaudiValidation.NormalizeArabicName(p.NormalizedName); bool sameBirth = birth.HasValue && p.DateOfBirth.HasValue && birth.Value.Date == p.DateOfBirth.Value.Date, samePhone = !string.IsNullOrEmpty(phone) && p.Mobile == phone;
@@ -200,7 +227,7 @@ namespace PatientRecordsSaudi.Services
                 foreach (Patient p in col.Find(Query.Contains("NormalizedName", name))) list[p.Id] = p; string phone = SaudiValidation.NormalizeSaudiMobile(q); foreach (Patient p in col.Find(x => x.Mobile == phone)) list[p.Id] = p; result = list.Values;
             }
             result = result.Where(p => includeArchived || !p.IsArchived); if (sort == "الاسم") result = result.OrderBy(p => p.FullName); else if (sort == "الأحدث") result = result.OrderByDescending(p => p.CreatedAt); else if (sort == "آخر مراجعة") result = result.OrderByDescending(p => p.LastVisitAt ?? DateTime.MinValue); else result = result.OrderBy(p => p.FileNumber);
-            return result.Take(MaxPatients).ToList();
+            return result.Take(q.Length == 0 ? DefaultPatientListLimit : MaxPatients).ToList();
         }
 
         public int CountActivePatients() { return db.GetCollection<Patient>("patients").Count(x => !x.IsArchived); }
@@ -299,7 +326,14 @@ namespace PatientRecordsSaudi.Services
             try
             {
                 if (!File.Exists(path)) return; long length = new FileInfo(path).Length;
-                using (var stream = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.None)) { byte[] zeros = new byte[81920]; long remaining = length; while (remaining > 0) { int count = (int)Math.Min(zeros.Length, remaining); stream.Write(zeros, 0, count); remaining -= count; } stream.Flush(true); }
+                using (var stream = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.None))
+                {
+                    byte[] buffer = new byte[81920]; long remaining = length;
+                    while (remaining > 0) { int count = (int)Math.Min(buffer.Length, remaining); RandomNumberGenerator.Fill(buffer.AsSpan(0, count)); stream.Write(buffer, 0, count); remaining -= count; }
+                    stream.Flush(true); stream.Position = 0; Array.Clear(buffer, 0, buffer.Length); remaining = length;
+                    while (remaining > 0) { int count = (int)Math.Min(buffer.Length, remaining); stream.Write(buffer, 0, count); remaining -= count; }
+                    stream.Flush(true); CryptographicOperations.ZeroMemory(buffer);
+                }
                 File.SetAttributes(path, FileAttributes.Normal); File.Delete(path);
             }
             catch { try { if (File.Exists(path)) File.Delete(path); } catch { } }
@@ -429,11 +463,21 @@ namespace PatientRecordsSaudi.Services
         public void Audit(string action, string entityType, string entityId, long? fileNumber, string details) { AuditInternal(action, entityType, entityId, fileNumber, details); }
         public void AuditSecurityEvent(string userName, string action, string details, DateTime occurredAt)
         {
-            db.GetCollection<AuditEntry>("audit").Insert(new AuditEntry { Id = Guid.NewGuid(), OccurredAt = occurredAt, Action = action, EntityType = "Security", EntityId = userName ?? "", FileNumber = null, Details = details ?? "", MachineName = Environment.MachineName, UserName = string.IsNullOrWhiteSpace(userName) ? "غير معروف" : userName }); db.Checkpoint();
+            InsertAudit(new AuditEntry { Id = Guid.NewGuid(), OccurredAt = occurredAt, Action = action, EntityType = "Security", EntityId = userName ?? "", FileNumber = null, Details = details ?? "", MachineName = Environment.MachineName, UserName = string.IsNullOrWhiteSpace(userName) ? "غير معروف" : userName }); db.Checkpoint();
         }
-        private void AuditInternal(string action, string entityType, string entityId, long? fileNumber, string details) { db.GetCollection<AuditEntry>("audit").Insert(new AuditEntry { Id = Guid.NewGuid(), OccurredAt = DateTime.Now, Action = action, EntityType = entityType, EntityId = entityId, FileNumber = fileNumber, Details = details ?? "", MachineName = Environment.MachineName, UserName = currentUser }); }
-        public List<AuditEntry> GetRecentAudit(int count) { return db.GetCollection<AuditEntry>("audit").FindAll().OrderByDescending(x => x.OccurredAt).Take(count).ToList(); }
-        public List<AuditEntry> GetAllAudit() { return db.GetCollection<AuditEntry>("audit").FindAll().OrderByDescending(x => x.OccurredAt).ToList(); }
+        private void AuditInternal(string action, string entityType, string entityId, long? fileNumber, string details) { InsertAudit(new AuditEntry { Id = Guid.NewGuid(), OccurredAt = DateTime.Now, Action = action, EntityType = entityType, EntityId = entityId, FileNumber = fileNumber, Details = details ?? "", MachineName = Environment.MachineName, UserName = currentUser }); }
+        private void InsertAudit(AuditEntry entry)
+        {
+            var collection = db.GetCollection<AuditEntry>("audit"); collection.Insert(entry);
+            if (collection.Count() > MaxAuditEntries + 100) TrimAuditIfNeeded(collection);
+        }
+        private static void TrimAuditIfNeeded(ILiteCollection<AuditEntry> collection)
+        {
+            int excess = collection.Count() - MaxAuditEntries; if (excess <= 0) return;
+            foreach (AuditEntry old in collection.Find(Query.All("OccurredAt", Query.Ascending), 0, excess).ToList()) collection.Delete(old.Id);
+        }
+        public List<AuditEntry> GetRecentAudit(int count) { int limit = Math.Max(1, Math.Min(count, 5000)); return db.GetCollection<AuditEntry>("audit").Find(Query.All("OccurredAt", Query.Descending), 0, limit).ToList(); }
+        public List<AuditEntry> GetAuditPage(int skip, int count) { int offset = Math.Max(0, skip), limit = Math.Max(1, Math.Min(count, 5000)); return db.GetCollection<AuditEntry>("audit").Find(Query.All("OccurredAt", Query.Descending), offset, limit).ToList(); }
         public void Checkpoint() { if (db != null) db.Checkpoint(); }
         public void ValidateDatabaseFile(string path)
         {

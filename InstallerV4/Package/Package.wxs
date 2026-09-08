@@ -4,7 +4,7 @@
   <Package Id="MohammedMousaAsiri.SaudiPatientRecords"
            Name="نظام إدارة سجلات المراجعين"
            Manufacturer="Mohammed Mousa Asiri"
-           Version="4.1.0"
+           Version="4.1.1"
            Language="1025"
            Scope="perUser"
            InstallerVersion="500"

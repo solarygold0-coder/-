@@ -80,7 +80,7 @@ namespace PatientRecordsSaudi.UI
             Button add = UiKit.Button("مراجع جديد", NewPatient, false), edit = UiKit.Button(session.IsReadOnly ? "فتح الملف" : "فتح/تعديل الملف", EditPatient, false), archive = UiKit.Button("أرشفة", ArchivePatient, true), appointment = UiKit.Button("موعد جديد", NewAppointmentForSelected, false), task = UiKit.Button("مهمة جديدة", NewTaskForSelected, false);
             add.Enabled = appointment.Enabled = task.Enabled = !session.IsReadOnly; archive.Enabled = session.IsAdmin; tools.Controls.Add(add); tools.Controls.Add(edit); tools.Controls.Add(archive); tools.Controls.Add(appointment); tools.Controls.Add(task); tools.Controls.Add(UiKit.Button("طباعة ملخص المراجع", PrintPatientSummary, false));
             tools.Controls.Add(showArchived); tools.Controls.Add(UiKit.Label("فرز:", true)); tools.Controls.Add(sortMode); tools.Controls.Add(UiKit.Label("بحث بـ:", true)); tools.Controls.Add(searchMode); searchText.Width = 230; searchText.Dock = DockStyle.None; tools.Controls.Add(searchText); tools.Controls.Add(UiKit.Button("بحث", delegate { LoadPatients(); }, false));
-            tools.Controls.Add(new Label { Text = "السعة 10,000 مراجع؛ البحث بالملف أو الهوية أو الاسم أو الجوال أو المدينة", AutoSize = true, ForeColor = Color.DimGray, Font = UiKit.NormalFont, Margin = new Padding(10, 12, 10, 5) });
+            tools.Controls.Add(new Label { Text = "السعة 10,000 مراجع؛ تعرض القائمة أول 500 سجل ويظهر البحث جميع النتائج المطابقة", AutoSize = true, ForeColor = Color.DimGray, Font = UiKit.NormalFont, Margin = new Padding(10, 12, 10, 5) });
             tab.Controls.Add(tools); ConfigurePatientGrid(); tab.Controls.Add(patientGrid); patientGrid.BringToFront();
             patientGrid.CellDoubleClick += delegate { OpenSelectedPatient(patientGrid); }; patientGrid.CellContentClick += delegate(object s, DataGridViewCellEventArgs e) { if (e.RowIndex >= 0 && patientGrid.Columns[e.ColumnIndex].Name == "FullName") OpenSelectedPatient(patientGrid); };
             searchText.KeyDown += delegate(object s, KeyEventArgs e) { if (e.KeyCode == Keys.Enter) LoadPatients(); }; showArchived.CheckedChanged += delegate { LoadPatients(); }; sortMode.SelectedIndexChanged += delegate { LoadPatients(); };
@@ -336,7 +336,21 @@ namespace PatientRecordsSaudi.UI
             if (!UiKit.Confirm("سجل العمليات قد يحتوي بيانات شخصية وغير مشفرة. هل تريد المتابعة؟", "تحذير خصوصية")) return;
             using (var save = new SaveFileDialog { Filter = "CSV (*.csv)|*.csv", FileName = "سجل_العمليات_" + DateTime.Today.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + ".csv" }) if (save.ShowDialog(this) == DialogResult.OK)
             {
-                try { var sb = new StringBuilder(); sb.AppendLine("الوقت,الموظف,العملية,نوع السجل,رقم الملف,التفاصيل,الجهاز"); foreach (AuditEntry a in database.GetAllAudit()) sb.AppendLine(Csv(a.OccurredAt.ToString("yyyy/MM/dd HH:mm:ss")) + "," + Csv(a.UserName) + "," + Csv(a.Action) + "," + Csv(a.EntityType) + "," + Csv(a.FileNumber.HasValue ? a.FileNumber.Value.ToString() : "") + "," + Csv(a.Details) + "," + Csv(a.MachineName)); File.WriteAllText(save.FileName, sb.ToString(), new UTF8Encoding(true)); AppDatabase.TryRestrictFileToCurrentUser(save.FileName); database.Audit("تصدير سجل العمليات", "Export", Path.GetFileName(save.FileName), null, "تصدير كامل"); database.Checkpoint(); MessageBox.Show("تم تصدير سجل العمليات كاملًا.", "تم", MessageBoxButtons.OK, MessageBoxIcon.Information); }
+                try
+                {
+                    int skip = 0, total = 0; const int pageSize = 1000;
+                    using (var writer = new StreamWriter(save.FileName, false, new UTF8Encoding(true)))
+                    {
+                        writer.WriteLine("الوقت,الموظف,العملية,نوع السجل,رقم الملف,التفاصيل,الجهاز");
+                        while (true)
+                        {
+                            List<AuditEntry> page = database.GetAuditPage(skip, pageSize);
+                            foreach (AuditEntry a in page) writer.WriteLine(Csv(a.OccurredAt.ToString("yyyy/MM/dd HH:mm:ss")) + "," + Csv(a.UserName) + "," + Csv(a.Action) + "," + Csv(a.EntityType) + "," + Csv(a.FileNumber.HasValue ? a.FileNumber.Value.ToString() : "") + "," + Csv(a.Details) + "," + Csv(a.MachineName));
+                            total += page.Count; if (page.Count < pageSize) break; skip += page.Count;
+                        }
+                    }
+                    AppDatabase.TryRestrictFileToCurrentUser(save.FileName); database.Audit("تصدير سجل العمليات", "Export", Path.GetFileName(save.FileName), null, "الصفوف: " + total); database.Checkpoint(); MessageBox.Show("تم تصدير سجل العمليات كاملًا بعدد " + total.ToString("N0") + " عملية.", "تم", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
                 catch (Exception ex) { UiKit.ShowError(ex.Message); }
             }
         }

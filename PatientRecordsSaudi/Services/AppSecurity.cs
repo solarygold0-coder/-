@@ -57,8 +57,6 @@ namespace PatientRecordsSaudi.Services
         public string WrappedKeyCipher { get; set; }
         public string WrappedKeyMac { get; set; }
         public int EncryptionVersion { get; set; }
-        public int FailedLoginCount { get; set; }
-        public DateTime? LockoutUntilUtc { get; set; }
     }
 
     public sealed class SecurityAuditEvent
@@ -113,15 +111,12 @@ namespace PatientRecordsSaudi.Services
             SecurityStore store = LoadStore(); string key = NormalizeUsername(username);
             SecurityUserRecord user = store.Users.FirstOrDefault(x => x.Username == key);
             if (user == null || !user.IsActive) { TryLog(key, "محاولة دخول مرفوضة", user == null ? "حساب غير موجود" : "حساب معطل"); throw new UnauthorizedAccessException("اسم المستخدم أو كلمة المرور غير صحيحة."); }
-            if (user.LockoutUntilUtc.HasValue && user.LockoutUntilUtc.Value > DateTime.UtcNow) { TryLog(key, "محاولة دخول أثناء القفل", "الحساب مقفل مؤقتًا"); throw new UnauthorizedAccessException("الحساب مقفل مؤقتًا بسبب محاولات دخول متكررة. حاول بعد " + user.LockoutUntilUtc.Value.ToLocalTime().ToString("HH:mm") + "."); }
-            bool clearedExpiredLock = user.LockoutUntilUtc.HasValue; if (clearedExpiredLock) { user.LockoutUntilUtc = null; user.FailedLoginCount = 0; }
             string dbPassword;
             if (!TryUnwrap(user, password, out dbPassword))
             {
-                user.FailedLoginCount++; if (user.FailedLoginCount >= 5) { user.LockoutUntilUtc = DateTime.UtcNow.AddMinutes(15); user.FailedLoginCount = 0; } SaveStore(store); TryLog(key, user.LockoutUntilUtc.HasValue ? "قفل حساب" : "فشل تسجيل دخول", user.LockoutUntilUtc.HasValue ? "خمس محاولات غير صحيحة" : "كلمة مرور غير صحيحة");
-                throw new UnauthorizedAccessException(user.LockoutUntilUtc.HasValue && user.LockoutUntilUtc.Value > DateTime.UtcNow ? "تم قفل الحساب لمدة 15 دقيقة بعد خمس محاولات غير صحيحة." : "اسم المستخدم أو كلمة المرور غير صحيحة.");
+                TryLog(key, "فشل تسجيل دخول", "كلمة مرور غير صحيحة");
+                throw new UnauthorizedAccessException("اسم المستخدم أو كلمة المرور غير صحيحة.");
             }
-            if (clearedExpiredLock || user.FailedLoginCount != 0 || user.LockoutUntilUtc.HasValue) { user.FailedLoginCount = 0; user.LockoutUntilUtc = null; SaveStore(store); }
             if (user.EncryptionVersion < 2)
             {
                 SecurityUserRecord upgraded = CreateRecord(user.Username, user.DisplayName, user.Role, password, dbPassword); upgraded.IsActive = user.IsActive; store.Users[store.Users.IndexOf(user)] = upgraded; user = upgraded; SaveStore(store);

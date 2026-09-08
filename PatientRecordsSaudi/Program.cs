@@ -9,6 +9,8 @@ namespace PatientRecordsSaudi
 {
     internal static class Program
     {
+        private const string CurrentDataFolderName = "SaudiPatientRecordsSecureV2";
+        private const string LegacyDataFolderName = "SaudiPatientRecords";
         public static string DataDirectory { get; private set; }
 
         [STAThread]
@@ -21,7 +23,7 @@ namespace PatientRecordsSaudi
             }
 
             bool firstInstance;
-            using (var instanceMutex = new Mutex(true, @"Local\SaudiPatientRecords_A7904157_8218_4708_9191_D6C477B3940C", out firstInstance))
+            using (var instanceMutex = new Mutex(true, @"Local\SaudiPatientRecordsSecureV2_2AE74028_248D_4EE5_96FD_02DC05C303C6", out firstInstance))
             {
                 if (!firstInstance)
                 {
@@ -31,8 +33,19 @@ namespace PatientRecordsSaudi
                 }
 
                 ApplicationConfiguration.Initialize();
-                DataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SaudiPatientRecords");
-                Directory.CreateDirectory(DataDirectory);
+                Application.ApplicationExit += delegate { UiKit.DisposeResources(); };
+                string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                DataDirectory = Path.Combine(localAppData, CurrentDataFolderName);
+                string legacyDataDirectory = Path.Combine(localAppData, LegacyDataFolderName);
+                try { MigrateLegacyDataOnce(legacyDataDirectory, DataDirectory); }
+                catch (Exception ex)
+                {
+                    LogUnexpectedError(ex, "Migration");
+                    MessageBox.Show("تعذر عزل بيانات النسخة الجديدة وترحيل البيانات السابقة بأمان. أغلق أي نسخة قديمة ثم أعد تشغيل البرنامج. لم يتم تعديل بياناتك القديمة.\n\n" + ex.Message,
+                        "تعذر ترحيل البيانات", MessageBoxButtons.OK, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1,
+                        MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
+                    return;
+                }
                 Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
                 Application.ThreadException += delegate(object sender, ThreadExceptionEventArgs e)
                 {
@@ -78,13 +91,16 @@ namespace PatientRecordsSaudi
             try
             {
                 Directory.CreateDirectory(folder);
+                string legacyProbe = Path.Combine(folder, "legacy-probe"), currentProbe = Path.Combine(folder, "current-probe"); Directory.CreateDirectory(legacyProbe); File.WriteAllText(Path.Combine(legacyProbe, "migration.test"), "ok");
+                MigrateLegacyDataOnce(legacyProbe, currentProbe); if (File.ReadAllText(Path.Combine(currentProbe, "migration.test")) != "ok" || !File.Exists(Path.Combine(currentProbe, ".generation-v2"))) return 4;
                 var security = new AppSecurity(folder);
-                SecuritySession session = security.Configure("فحص التشغيل", "test1234");
+                if (!security.EnsureDefaultConfiguration()) return 3;
+                SecuritySession session = security.Login("admin", "admin");
                 using (session)
                 using (var database = new AppDatabase(folder, session.MaterializeDatabasePassword(), session.DisplayName, session.Role))
                 {
                     security.FlushPendingAudit(database);
-                    if (database.CountActivePatients() != 0 || database.GetSettings().NextFileNumber != 1) return 2;
+                    if (!session.IsAdmin || !session.UsesDefaultCredentials || database.CountActivePatients() != 0 || database.GetSettings().NextFileNumber != 1) return 2;
                     database.Checkpoint();
                 }
                 return 0;
@@ -97,6 +113,34 @@ namespace PatientRecordsSaudi
             {
                 try { Directory.Delete(folder, true); } catch { }
             }
+        }
+
+        private static void MigrateLegacyDataOnce(string legacyDirectory, string currentDirectory)
+        {
+            if (Directory.Exists(currentDirectory)) return;
+            if (!Directory.Exists(legacyDirectory)) { Directory.CreateDirectory(currentDirectory); return; }
+
+            bool legacyInstanceRunning;
+            using (var legacyMutex = new Mutex(false, @"Local\SaudiPatientRecords_A7904157_8218_4708_9191_D6C477B3940C"))
+            {
+                try { legacyInstanceRunning = !legacyMutex.WaitOne(0); }
+                catch (AbandonedMutexException) { legacyInstanceRunning = false; }
+                if (legacyInstanceRunning) throw new InvalidOperationException("توجد نسخة سابقة تعمل الآن.");
+
+                string stagingDirectory = currentDirectory + ".migrating";
+                if (Directory.Exists(stagingDirectory)) Directory.Delete(stagingDirectory, true);
+                CopyDirectory(legacyDirectory, stagingDirectory);
+                File.WriteAllText(Path.Combine(stagingDirectory, ".generation-v2"), "Saudi Patient Records secure data generation 2");
+                Directory.Move(stagingDirectory, currentDirectory);
+                try { legacyMutex.ReleaseMutex(); } catch (ApplicationException) { }
+            }
+        }
+
+        private static void CopyDirectory(string source, string destination)
+        {
+            Directory.CreateDirectory(destination);
+            foreach (string file in Directory.EnumerateFiles(source)) File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), false);
+            foreach (string directory in Directory.EnumerateDirectories(source)) CopyDirectory(directory, Path.Combine(destination, Path.GetFileName(directory)));
         }
 
         private static void LogUnexpectedError(Exception exception, string area)
