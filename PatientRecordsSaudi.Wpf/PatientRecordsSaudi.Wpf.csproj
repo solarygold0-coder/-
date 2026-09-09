@@ -23,9 +23,9 @@
     <DebugSymbols>false</DebugSymbols>
     <Deterministic>true</Deterministic>
     <ApplicationManifest>..\PatientRecordsSaudi\app.manifest</ApplicationManifest>
-    <Version>5.1.0</Version>
-    <FileVersion>5.1.0.0</FileVersion>
-    <AssemblyVersion>5.1.0.0</AssemblyVersion>
+    <Version>5.2.0</Version>
+    <FileVersion>5.2.0.0</FileVersion>
+    <AssemblyVersion>5.2.0.0</AssemblyVersion>
     <Company>Mohammed Mousa Asiri</Company>
     <Product>Saudi Patient Records</Product>
     <Copyright>Copyright © Mohammed Mousa Asiri 2026</Copyright>

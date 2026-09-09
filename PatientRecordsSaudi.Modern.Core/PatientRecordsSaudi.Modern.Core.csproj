@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <LangVersion>14.0</LangVersion>
-    <Version>5.1.0</Version>
+    <Version>5.2.0</Version>
     <Company>Mohammed Mousa Asiri</Company>
     <Product>Saudi Patient Records</Product>
     <Copyright>Copyright © Mohammed Mousa Asiri 2026</Copyright>

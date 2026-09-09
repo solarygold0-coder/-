@@ -163,6 +163,7 @@ INSERT INTO meta(key,value) VALUES('schema_version',$version)
             RequireAdmin();
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             if (settings.WorkDayStartMinutes < 0 || settings.WorkDayEndMinutes > 24 * 60 || settings.WorkDayStartMinutes >= settings.WorkDayEndMinutes) throw new InvalidOperationException("ساعات الدوام غير صحيحة.");
+            if (settings.DefaultAppointmentMinutes < 5 || settings.DefaultAppointmentMinutes > 12 * 60) throw new InvalidOperationException("مدة الموعد الافتراضية غير صحيحة.");
             if (settings.BackupIntervalHours < 1 || settings.BackupIntervalHours > 24) throw new InvalidOperationException("فترة النسخ الاحتياطي يجب أن تكون بين ساعة و24 ساعة.");
             settings.AutoBackupDirectory = (settings.AutoBackupDirectory ?? "").Trim();
             NormalizeLookups(settings); settings.Id = 1; settings.UpdatedAt = DateTime.Now;

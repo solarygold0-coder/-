@@ -117,6 +117,7 @@ public partial class App : System.Windows.Application
             new AccountManagerWindow(security, session),
             new ClosureDatesWindow(database),
             new RecycleBinWindow(database),
+            new ReminderWindow(Array.Empty<PatientRecordsSaudi.Models.Appointment>(), Array.Empty<PatientRecordsSaudi.Models.PatientTask>(), _ => { }),
             new UserEditorWindow(),
             new PasswordWindow("فحص الواجهة")
         };

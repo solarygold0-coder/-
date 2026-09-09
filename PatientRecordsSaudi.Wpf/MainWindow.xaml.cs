@@ -1,12 +1,14 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.IO;
 using System.Printing;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using PatientRecordsSaudi.Models;
@@ -22,8 +24,11 @@ public partial class MainWindow : FluentWindow
     private readonly AppSecurity security;
     private readonly SecuritySession session;
     private readonly DispatcherTimer reminderTimer = new() { Interval = TimeSpan.FromMinutes(1) };
+    private readonly DispatcherTimer maintenanceTimer = new() { Interval = TimeSpan.FromMinutes(15) };
     private readonly List<Button> navigationButtons;
     private readonly List<Border> pages;
+    private string autoBackupDirectory = string.Empty;
+    private ReminderWindow? activeReminder;
 
     public MainWindow(AppDatabase database, BackupService backups, AppSecurity security, SecuritySession session)
     {
@@ -32,6 +37,7 @@ public partial class MainWindow : FluentWindow
         this.security = security;
         this.session = session;
         InitializeComponent();
+        InitializeSettingsChoices();
 
         navigationButtons = new() { DashboardNav, PatientsNav, AppointmentsNav, TasksNav, InventoryNav, SettingsNav };
         pages = new() { DashboardPage, PatientsPage, AppointmentsPage, TasksPage, InventoryPage, SettingsPage };
@@ -42,12 +48,16 @@ public partial class MainWindow : FluentWindow
 
         reminderTimer.Tick += (_, _) => CheckReminders();
         reminderTimer.Start();
+        maintenanceTimer.Tick += (_, _) => RunScheduledBackup(false);
+        maintenanceTimer.Start();
         Loaded += (_, _) =>
         {
+            ApplyResponsiveLayout();
             AnnualInventoryAlert();
             CheckReminders();
+            RunScheduledBackup(false);
         };
-        Closing += (_, _) => database.Checkpoint();
+        Closing += (_, _) => { reminderTimer.Stop(); maintenanceTimer.Stop(); database.Checkpoint(); };
     }
 
     private void ShowPage(int index, string title)
@@ -87,12 +97,16 @@ public partial class MainWindow : FluentWindow
         InventoryCount.Text = inventory.Count.ToString("N0");
         DashboardTodayGrid.ItemsSource = new ObservableCollection<Appointment>(today);
         DashboardTasksGrid.ItemsSource = new ObservableCollection<PatientTask>(tasks.Take(30));
+        SetEmptyState(DashboardTodayEmpty, today.Count == 0);
+        SetEmptyState(DashboardTasksEmpty, tasks.Count == 0);
     }
 
     private void LoadPatients()
     {
         if (PatientsGrid is null || PatientSearchMode is null || PatientSortMode is null) return;
-        PatientsGrid.ItemsSource = new ObservableCollection<Patient>(database.SearchPatients(ComboText(PatientSearchMode), PatientSearchText.Text, ShowArchivedCheck.IsChecked == true, ComboText(PatientSortMode)));
+        List<Patient> patients = database.SearchPatients(ComboText(PatientSearchMode), PatientSearchText.Text, ShowArchivedCheck.IsChecked == true, ComboText(PatientSortMode));
+        PatientsGrid.ItemsSource = new ObservableCollection<Patient>(patients);
+        SetEmptyState(PatientsEmpty, patients.Count == 0);
     }
 
     private void LoadAppointments()
@@ -106,19 +120,25 @@ public partial class MainWindow : FluentWindow
             case "اليوم": from = DateTime.Today; to = DateTime.Today.AddDays(1); break;
             case "هذا الأسبوع": from = DateTime.Today; to = DateTime.Today.AddDays(7); break;
         }
-        AppointmentsGrid.ItemsSource = new ObservableCollection<Appointment>(database.GetAppointments(from, to));
+        List<Appointment> appointments = database.GetAppointments(from, to);
+        AppointmentsGrid.ItemsSource = new ObservableCollection<Appointment>(appointments);
+        SetEmptyState(AppointmentsEmpty, appointments.Count == 0);
     }
 
     private void LoadTasks()
     {
         if (TasksGrid is null) return;
-        TasksGrid.ItemsSource = new ObservableCollection<PatientTask>(database.GetTasks(ShowCompletedCheck.IsChecked == true));
+        List<PatientTask> tasks = database.GetTasks(ShowCompletedCheck.IsChecked == true);
+        TasksGrid.ItemsSource = new ObservableCollection<PatientTask>(tasks);
+        SetEmptyState(TasksEmpty, tasks.Count == 0);
     }
 
     private void LoadInventory()
     {
         if (InventoryGrid is null) return;
-        InventoryGrid.ItemsSource = new ObservableCollection<Patient>(database.GetInventoryCandidates(DateTime.Today));
+        List<Patient> inventory = database.GetInventoryCandidates(DateTime.Today);
+        InventoryGrid.ItemsSource = new ObservableCollection<Patient>(inventory);
+        SetEmptyState(InventoryEmpty, inventory.Count == 0);
     }
 
     private void LoadSettings()
@@ -128,8 +148,89 @@ public partial class MainWindow : FluentWindow
         ClinicNameBox.Text = settings.ClinicName;
         ClinicPhoneBox.Text = settings.ClinicPhone;
         ClinicAddressBox.Text = settings.ClinicAddress;
+        SelectSettingOption(WorkStartBox, settings.WorkDayStartMinutes);
+        SelectSettingOption(WorkEndBox, settings.WorkDayEndMinutes);
+        SelectSettingOption(DefaultDurationBox, settings.DefaultAppointmentMinutes);
+        SelectSettingOption(BackupIntervalBox, settings.BackupIntervalHours);
+        autoBackupDirectory = settings.AutoBackupDirectory ?? string.Empty;
+        RefreshBackupDirectoryText();
+        VisitTypesText.Text = JoinLines(settings.VisitTypes);
+        AppointmentStatusesText.Text = JoinLines(settings.AppointmentStatuses);
+        TaskPrioritiesText.Text = JoinLines(settings.TaskPriorities);
+        GenderOptionsText.Text = JoinLines(settings.GenderOptions);
+        BloodTypesText.Text = JoinLines(settings.BloodTypes);
+        ClinicLogoStatusText.Text = string.IsNullOrWhiteSpace(settings.ClinicLogoStoredId) ? "لا يوجد شعار حالي" : "الشعار الحالي: " + settings.ClinicLogoFileName;
+        BackupStatusText.Text = "حالة آخر نسخة: " + settings.LastBackupStatus;
         RequireLoginCheck.IsChecked = security.IsLoginRequired;
         Title = "نظام إدارة سجلات المراجعين — " + settings.ClinicName;
+        SetSettingsEnabled(session.IsAdmin);
+    }
+
+    private void InitializeSettingsChoices()
+    {
+        var times = new List<SettingOption>();
+        for (int minutes = 0; minutes <= 24 * 60; minutes += 30)
+        {
+            int hour = (minutes / 60) % 24;
+            int minute = minutes % 60;
+            int displayHour = hour % 12;
+            if (displayHour == 0) displayHour = 12;
+            times.Add(new SettingOption(minutes, $"{displayHour:00}:{minute:00} {(hour >= 12 ? "م" : "ص")}"));
+        }
+        WorkStartBox.ItemsSource = times.Where(x => x.Value < 24 * 60).ToList();
+        WorkEndBox.ItemsSource = times.Where(x => x.Value > 0).ToList();
+        DefaultDurationBox.ItemsSource = new[] { 15, 20, 30, 45, 60, 90, 120 }.Select(x => new SettingOption(x, x + " دقيقة")).ToList();
+        BackupIntervalBox.ItemsSource = new[] { 1, 2, 4, 6, 8, 12, 24 }.Select(x => new SettingOption(x, x == 1 ? "كل ساعة" : "كل " + x + " ساعات")).ToList();
+    }
+
+    private static void SelectSettingOption(ComboBox combo, int value)
+    {
+        combo.SelectedItem = combo.Items.Cast<SettingOption>().FirstOrDefault(x => x.Value == value);
+        if (combo.SelectedItem is null && combo.Items.Count > 0) combo.SelectedIndex = 0;
+    }
+
+    private static int SelectedSettingValue(ComboBox combo, string fieldName)
+    {
+        if (combo.SelectedItem is SettingOption option) return option.Value;
+        throw new InvalidOperationException("اختر " + fieldName + ".");
+    }
+
+    private static void SetEmptyState(TextBlock text, bool empty) => text.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
+    private static string JoinLines(IEnumerable<string>? values) => string.Join(Environment.NewLine, values ?? Array.Empty<string>());
+    private static List<string> LookupLines(TextBox box) => box.Text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None).Select(x => x.Trim()).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+    private void SetSettingsEnabled(bool enabled)
+    {
+        foreach (Control control in new Control[] { ClinicNameBox, ClinicPhoneBox, ClinicAddressBox, WorkStartBox, WorkEndBox, DefaultDurationBox, BackupIntervalBox, VisitTypesText, AppointmentStatusesText, TaskPrioritiesText, GenderOptionsText, BloodTypesText, RequireLoginCheck })
+            control.IsEnabled = enabled;
+    }
+
+    private void RefreshBackupDirectoryText()
+    {
+        AutoBackupDirectoryBox.Text = string.IsNullOrWhiteSpace(autoBackupDirectory)
+            ? "المجلد الداخلي الآمن داخل بيانات التطبيق"
+            : autoBackupDirectory;
+    }
+
+    private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e) => ApplyResponsiveLayout();
+
+    private void ApplyResponsiveLayout()
+    {
+        if (DashboardTablesGrid is null || SettingsActionsGrid is null) return;
+        bool compact = ActualWidth < 1280;
+        DashboardTablesGrid.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Star);
+        DashboardTablesGrid.ColumnDefinitions[1].Width = compact ? new GridLength(0) : new GridLength(2, GridUnitType.Star);
+        Grid.SetColumn(DashboardAppointmentsCard, 0);
+        Grid.SetRow(DashboardAppointmentsCard, 0);
+        Grid.SetColumn(DashboardTasksCard, compact ? 0 : 1);
+        Grid.SetRow(DashboardTasksCard, compact ? 1 : 0);
+
+        SettingsActionsGrid.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Star);
+        SettingsActionsGrid.ColumnDefinitions[1].Width = compact ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+        Grid.SetColumn(SecuritySettingsCard, 0);
+        Grid.SetRow(SecuritySettingsCard, 0);
+        Grid.SetColumn(BackupSettingsCard, compact ? 0 : 1);
+        Grid.SetRow(BackupSettingsCard, compact ? 1 : 0);
     }
 
     private static string ComboText(ComboBox combo)
@@ -264,6 +365,18 @@ public partial class MainWindow : FluentWindow
         if (appointment is null) { ShowError("اختر موعدًا أولًا."); return; }
         AppSettings settings = database.GetSettings();
         var document = new FlowDocument { FlowDirection = FlowDirection.RightToLeft, FontFamily = new FontFamily("Segoe UI"), FontSize = 15, PagePadding = new Thickness(55) };
+        byte[]? logo = database.GetClinicLogo();
+        if (logo is { Length: > 0 })
+        {
+            using var stream = new MemoryStream(logo);
+            var imageSource = new BitmapImage();
+            imageSource.BeginInit();
+            imageSource.CacheOption = BitmapCacheOption.OnLoad;
+            imageSource.StreamSource = stream;
+            imageSource.EndInit();
+            imageSource.Freeze();
+            document.Blocks.Add(new BlockUIContainer(new System.Windows.Controls.Image { Source = imageSource, Width = 96, Height = 96, Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Center }));
+        }
         document.Blocks.Add(new Paragraph(new Run(settings.ClinicName)) { FontSize = 24, FontWeight = FontWeights.Bold, TextAlignment = TextAlignment.Center });
         document.Blocks.Add(new Paragraph(new Run("إشعار موعد")) { FontSize = 20, FontWeight = FontWeights.SemiBold, TextAlignment = TextAlignment.Center });
         document.Blocks.Add(new Paragraph(new Run("اسم المراجع: " + appointment.PatientName)));
@@ -338,6 +451,16 @@ public partial class MainWindow : FluentWindow
             settings.ClinicName = ClinicNameBox.Text.Trim();
             settings.ClinicPhone = ClinicPhoneBox.Text.Trim();
             settings.ClinicAddress = ClinicAddressBox.Text.Trim();
+            settings.WorkDayStartMinutes = SelectedSettingValue(WorkStartBox, "بداية الدوام");
+            settings.WorkDayEndMinutes = SelectedSettingValue(WorkEndBox, "نهاية الدوام");
+            settings.DefaultAppointmentMinutes = SelectedSettingValue(DefaultDurationBox, "مدة الموعد الافتراضية");
+            settings.BackupIntervalHours = SelectedSettingValue(BackupIntervalBox, "فترة النسخ الاحتياطي");
+            settings.AutoBackupDirectory = autoBackupDirectory;
+            settings.VisitTypes = LookupLines(VisitTypesText);
+            settings.AppointmentStatuses = LookupLines(AppointmentStatusesText);
+            settings.TaskPriorities = LookupLines(TaskPrioritiesText);
+            settings.GenderOptions = LookupLines(GenderOptionsText);
+            settings.BloodTypes = LookupLines(BloodTypesText);
             database.SaveSettings(settings);
             security.SetLoginRequired(session, RequireLoginCheck.IsChecked == true);
             LoadSettings();
@@ -356,6 +479,48 @@ public partial class MainWindow : FluentWindow
         catch (Exception ex) { ShowError(ex.Message); }
     }
 
+    private void ChooseAutoBackupDirectory_Click(object sender, RoutedEventArgs e)
+    {
+        if (!GuardWrite()) return;
+        using var dialog = new System.Windows.Forms.FolderBrowserDialog { Description = "اختر مجلدًا على قرص خارجي أو موقع نسخ آمن" };
+        if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+        autoBackupDirectory = dialog.SelectedPath;
+        RefreshBackupDirectoryText();
+    }
+
+    private void ResetAutoBackupDirectory_Click(object sender, RoutedEventArgs e)
+    {
+        if (!GuardWrite()) return;
+        autoBackupDirectory = string.Empty;
+        RefreshBackupDirectoryText();
+    }
+
+    private void ChooseClinicLogo_Click(object sender, RoutedEventArgs e)
+    {
+        if (!GuardWrite()) return;
+        var dialog = new OpenFileDialog { Filter = "صور الشعار|*.png;*.jpg;*.jpeg", Title = "اختر شعار المنشأة" };
+        if (dialog.ShowDialog(this) != true) return;
+        try
+        {
+            using (var input = File.OpenRead(dialog.FileName))
+            {
+                BitmapDecoder decoder = BitmapDecoder.Create(input, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+                if (decoder.Frames.Count == 0 || decoder.Frames[0].PixelWidth < 32 || decoder.Frames[0].PixelHeight < 32)
+                    throw new InvalidOperationException("أبعاد الشعار صغيرة جدًا؛ الحد الأدنى 32×32 بكسل.");
+            }
+            database.SetClinicLogo(dialog.FileName);
+            ClinicLogoStatusText.Text = "الشعار الحالي: " + Path.GetFileName(dialog.FileName);
+        }
+        catch (Exception ex) { ShowError("تعذر حفظ الشعار: " + ex.Message); }
+    }
+
+    private void RemoveClinicLogo_Click(object sender, RoutedEventArgs e)
+    {
+        if (!GuardWrite() || !Confirm("إزالة شعار المنشأة من الطباعة؟")) return;
+        try { database.RemoveClinicLogo(); ClinicLogoStatusText.Text = "لا يوجد شعار حالي"; }
+        catch (Exception ex) { ShowError(ex.Message); }
+    }
+
     private void CreateBackup_Click(object sender, RoutedEventArgs e)
     {
         if (!GuardWrite()) return;
@@ -364,9 +529,11 @@ public partial class MainWindow : FluentWindow
         try
         {
             string path = backups.CreateBackup(dialog.SelectedPath, database);
+            database.UpdateBackupStatus("نجحت في " + DateTime.Now.ToString("yyyy/MM/dd HH:mm", CultureInfo.InvariantCulture) + " — " + Path.GetFileName(path), DateTime.Now);
+            LoadSettings();
             MessageBox.Show("تم إنشاء النسخة الاحتياطية:\n" + path, "نجح النسخ", MessageBoxButton.OK, MessageBoxImage.Information, MessageBoxResult.OK, MessageBoxOptions.RtlReading);
         }
-        catch (Exception ex) { ShowError(ex.Message); }
+        catch (Exception ex) { try { database.UpdateBackupStatus("فشلت: " + ex.Message, null); } catch { } ShowError(ex.Message); }
     }
 
     private void RestoreBackup_Click(object sender, RoutedEventArgs e)
@@ -396,6 +563,33 @@ public partial class MainWindow : FluentWindow
         LoadAll();
     }
 
+    private void RunScheduledBackup(bool force)
+    {
+        if (!session.IsAdmin) return;
+        try
+        {
+            AppSettings settings = database.GetSettings();
+            if (!force && settings.LastAutoBackupAt.HasValue && DateTime.Now - settings.LastAutoBackupAt.Value < TimeSpan.FromHours(settings.BackupIntervalHours)) return;
+            string folder = string.IsNullOrWhiteSpace(settings.AutoBackupDirectory) ? Path.Combine(database.DataDirectory, "AutoBackups") : settings.AutoBackupDirectory;
+            string path = backups.CreateBackup(folder, database);
+            database.UpdateBackupStatus("نجحت في " + DateTime.Now.ToString("yyyy/MM/dd HH:mm", CultureInfo.InvariantCulture) + " — " + Path.GetFileName(path), DateTime.Now);
+            PruneBackups(folder);
+            if (SettingsPage.Visibility == Visibility.Visible) LoadSettings();
+        }
+        catch (Exception ex)
+        {
+            try { database.UpdateBackupStatus("فشلت: " + ex.Message, null); } catch { }
+            if (SettingsPage.Visibility == Visibility.Visible) BackupStatusText.Text = "حالة آخر نسخة: فشلت — " + ex.Message;
+        }
+    }
+
+    private static void PruneBackups(string folder)
+    {
+        if (!Directory.Exists(folder)) return;
+        foreach (FileInfo file in new DirectoryInfo(folder).GetFiles("نسخة_سجلات_المراجعين_*.zip").OrderByDescending(x => x.CreationTimeUtc).Skip(30))
+            file.Delete();
+    }
+
     private void AnnualInventoryAlert()
     {
         try
@@ -420,16 +614,21 @@ public partial class MainWindow : FluentWindow
             DateTime now = DateTime.Now;
             List<Appointment> appointments = database.GetUnnotifiedAppointments(now.AddMinutes(-1), now.AddMinutes(15), 5);
             List<PatientTask> tasks = database.GetUnnotifiedTasks(now.AddMinutes(-1), now.AddMinutes(15), 5);
-            if (appointments.Count == 0 && tasks.Count == 0) return;
+            if (appointments.Count == 0 && tasks.Count == 0 || activeReminder is not null) return;
             foreach (Appointment item in appointments) database.MarkAppointmentNotified(item.Id);
             foreach (PatientTask item in tasks) database.MarkTaskNotified(item.Id);
-            string text = string.Join("\n", appointments.Select(x => "موعد: " + x.PatientName + " — " + x.Title + " — " + x.TimeText)
-                .Concat(tasks.Select(x => "مهمة: " + x.PatientName + " — " + x.Title)));
-            MessageBox.Show(text, "تنبيهات قريبة", MessageBoxButton.OK, MessageBoxImage.Information, MessageBoxResult.OK, MessageBoxOptions.RtlReading);
+            activeReminder = new ReminderWindow(appointments, tasks, patientId => OpenPatient(database.GetPatient(patientId))) { Owner = this };
+            activeReminder.Closed += (_, _) => activeReminder = null;
+            activeReminder.Show();
         }
         catch { }
     }
 
     private static bool Confirm(string text) => MessageBox.Show(text, "تأكيد", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No, MessageBoxOptions.RtlReading) == MessageBoxResult.Yes;
     private static void ShowError(string text) => MessageBox.Show(text, "تنبيه", MessageBoxButton.OK, MessageBoxImage.Warning, MessageBoxResult.OK, MessageBoxOptions.RtlReading);
+
+    private sealed record SettingOption(int Value, string Label)
+    {
+        public override string ToString() => Label;
+    }
 }
