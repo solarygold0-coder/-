@@ -12,7 +12,6 @@ public partial class DateTimeScrollPicker : UserControl
     public DateTimeScrollPicker()
     {
         InitializeComponent();
-        DayBox.ItemsSource = Enumerable.Range(1, 31).Select(x => x.ToString("00", CultureInfo.InvariantCulture));
         string[] names = { "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر" };
         MonthBox.ItemsSource = names.Select((name, index) => new MonthOption(index + 1, (index + 1).ToString("00") + " - " + name));
         HourBox.ItemsSource = Enumerable.Range(0, 24).Select(x => x.ToString("00", CultureInfo.InvariantCulture));
@@ -40,9 +39,9 @@ public partial class DateTimeScrollPicker : UserControl
             value = value.AddMinutes(remainder < 3 ? -remainder : 5 - remainder);
             value = value.AddTicks(-(value.Ticks % TimeSpan.TicksPerMinute));
             if (value.Year < minimumYear || value.Year > maximumYear) ConfigureYearRange(Math.Min(value.Year, minimumYear), Math.Max(value.Year, maximumYear));
-            DayBox.SelectedItem = value.Day.ToString("00", CultureInfo.InvariantCulture);
             MonthBox.SelectedValue = value.Month;
             YearBox.SelectedItem = value.Year;
+            RebuildDays(value.Day);
             HourBox.SelectedItem = value.Hour.ToString("00", CultureInfo.InvariantCulture);
             MinuteBox.SelectedItem = value.Minute.ToString("00", CultureInfo.InvariantCulture);
         }
@@ -81,5 +80,17 @@ public partial class DateTimeScrollPicker : UserControl
         int? selected = YearBox.SelectedItem as int?;
         YearBox.ItemsSource = Enumerable.Range(minimumYear, maximumYear - minimumYear + 1).Reverse().ToArray();
         if (selected.HasValue && selected >= minimumYear && selected <= maximumYear) YearBox.SelectedItem = selected.Value;
+    }
+
+    private void CalendarPart_SelectionChanged(object sender, SelectionChangedEventArgs e) => RebuildDays();
+
+    private void RebuildDays(int? preferredDay = null)
+    {
+        int current = preferredDay ?? (int.TryParse(DayBox.SelectedItem?.ToString(), out int selected) ? selected : 1);
+        int month = MonthBox.SelectedValue is int selectedMonth ? selectedMonth : DateTime.Today.Month;
+        int year = YearBox.SelectedItem is int selectedYear ? selectedYear : DateTime.Today.Year;
+        int maximum = DateTime.DaysInMonth(year, month);
+        DayBox.ItemsSource = Enumerable.Range(1, maximum).Select(x => x.ToString("00", CultureInfo.InvariantCulture)).ToArray();
+        DayBox.SelectedItem = Math.Min(current, maximum).ToString("00", CultureInfo.InvariantCulture);
     }
 }

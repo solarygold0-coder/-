@@ -24,6 +24,10 @@ public partial class PatientEditorWindow : FluentWindow
         original = patient;
         this.readOnly = readOnly;
         InitializeComponent();
+        DataObject.AddPastingHandler(NationalIdBox, DigitsOnly_Paste);
+        DataObject.AddPastingHandler(MobileBox, Phone_Paste);
+        DataObject.AddPastingHandler(AlternatePhoneBox, Phone_Paste);
+        DataObject.AddPastingHandler(EmergencyPhoneBox, Phone_Paste);
 
         AppSettings settings = database.GetSettings();
         GenderBox.ItemsSource = settings.GenderOptions;
@@ -55,6 +59,14 @@ public partial class PatientEditorWindow : FluentWindow
     private static string ComboText(ComboBox combo) => combo.SelectedItem is ComboBoxItem item ? item.Content?.ToString() ?? "" : combo.SelectedItem?.ToString() ?? combo.Text;
     private void DigitsOnly_PreviewTextInput(object sender, TextCompositionEventArgs e) => e.Handled = e.Text.Any(c => !char.IsDigit(c));
     private void Phone_PreviewTextInput(object sender, TextCompositionEventArgs e) => e.Handled = e.Text.Any(c => !char.IsDigit(c) && c != '+' && c != '-' && c != ' ');
+    private static void DigitsOnly_Paste(object sender, DataObjectPastingEventArgs e)
+    {
+        if (!e.DataObject.GetDataPresent(DataFormats.UnicodeText) || e.DataObject.GetData(DataFormats.UnicodeText) is not string value || value.Any(c => !char.IsDigit(c))) e.CancelCommand();
+    }
+    private static void Phone_Paste(object sender, DataObjectPastingEventArgs e)
+    {
+        if (!e.DataObject.GetDataPresent(DataFormats.UnicodeText) || e.DataObject.GetData(DataFormats.UnicodeText) is not string value || value.Any(c => !char.IsDigit(c) && c != '+' && c != '-' && c != ' ')) e.CancelCommand();
+    }
 
     private void Save_Click(object sender, RoutedEventArgs e)
     {

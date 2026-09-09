@@ -164,6 +164,8 @@ public partial class MainWindow : FluentWindow
         RequireLoginCheck.IsChecked = security.IsLoginRequired;
         Title = "نظام إدارة سجلات المراجعين — " + settings.ClinicName;
         SetSettingsEnabled(session.IsAdmin);
+        Visibility adminVisibility = session.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
+        ArchivePatientButton.Visibility = DeleteAppointmentButton.Visibility = DeleteTaskButton.Visibility = ArchiveInventoryButton.Visibility = adminVisibility;
     }
 
     private void InitializeSettingsChoices()
@@ -597,14 +599,17 @@ public partial class MainWindow : FluentWindow
             AppSettings settings = database.GetSettings();
             if (settings.LastInventoryAlertYear == DateTime.Today.Year) return;
             List<Patient> candidates = database.GetInventoryCandidates(DateTime.Today);
-            database.SetInventoryAlerted(DateTime.Today.Year);
             if (candidates.Count > 0)
             {
                 ShowPage(4, "الجرد السنوي");
                 MessageBox.Show("تنبيه الجرد السنوي: يوجد " + candidates.Count + " ملفًا لم يسجل له نشاط منذ عشر سنوات أو أكثر. راجع القائمة قبل الأرشفة.", "الجرد السنوي", MessageBoxButton.OK, MessageBoxImage.Warning, MessageBoxResult.OK, MessageBoxOptions.RtlReading);
+                database.SetInventoryAlerted(DateTime.Today.Year);
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            try { database.Audit("تعذر عرض تنبيه الجرد السنوي", "System", "annual-inventory", null, ex.Message); database.Checkpoint(); } catch { }
+        }
     }
 
     private void CheckReminders()

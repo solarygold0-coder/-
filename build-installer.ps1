@@ -13,6 +13,9 @@ $bundle = Join-Path $root "Installer\Bundle\Bundle.wixproj"
 $publish = Join-Path $root "artifacts\installer-publish\$Runtime"
 $release = Join-Path $root "release-installer"
 
+if (Test-Path (Join-Path $root "PatientRecordsSaudi")) { throw "Legacy WinForms source must not exist in the v6 tree." }
+if (Get-ChildItem $root -Recurse -File -Include *.csproj,*.cs | Select-String -Pattern "LiteDB|System\.Windows\.Forms" -Quiet) { throw "Legacy LiteDB or WinForms code must not exist in the v6 tree." }
+
 if (Test-Path $publish) { Remove-Item $publish -Recurse -Force }
 if (Test-Path $release) { Remove-Item $release -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $publish, $release | Out-Null
@@ -55,13 +58,13 @@ foreach ($file in @($setupOut, $standaloneOut)) {
     if ($header[0] -ne 0x4D -or $header[1] -ne 0x5A) { throw "$file is not a valid Windows PE executable." }
 }
 
-$install = Start-Process $setupOut -ArgumentList "/quiet /norestart" -Wait -PassThru
+$install = Start-Process "msiexec.exe" -ArgumentList "/i `"$($msi.FullName)`" /qn /norestart" -Wait -PassThru
 if ($install.ExitCode -ne 0 -and $install.ExitCode -ne 3010) { throw "Automated installer verification failed with exit code $($install.ExitCode)." }
 $installedExe = Join-Path $env:LOCALAPPDATA "Programs\Saudi Patient Records 6\SaudiPatientRecords.exe"
 if (-not (Test-Path $installedExe)) { throw "Installed executable was not found in the expected per-user location." }
 $selfTest = Start-Process $installedExe -ArgumentList "--self-test" -Wait -PassThru
 if ($selfTest.ExitCode -ne 0) { throw "Installed application self-test failed with exit code $($selfTest.ExitCode)." }
-$uninstall = Start-Process $setupOut -ArgumentList "/uninstall /quiet /norestart" -Wait -PassThru
+$uninstall = Start-Process "msiexec.exe" -ArgumentList "/x `"$($msi.FullName)`" /qn /norestart" -Wait -PassThru
 if ($uninstall.ExitCode -ne 0 -and $uninstall.ExitCode -ne 3010) { throw "Automated uninstall verification failed with exit code $($uninstall.ExitCode)." }
 
 $setupHash = (Get-FileHash $setupOut -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -76,6 +79,7 @@ $standaloneHash = (Get-FileHash $standaloneOut -Algorithm SHA256).Hash.ToLowerIn
     "DataProfile=Independent SaudiPatientRecordsV6; no automatic legacy copy"
     "Database=Encrypted SQLite (SQLCipher)"
     "Frontend=WPF + WPF-UI 4.3 Fluent"
+    "LegacyUI=None"
     "DigitalSignature=None (unsigned public-source build)"
     "SetupSHA256=$setupHash"
     "StandaloneSHA256=$standaloneHash"

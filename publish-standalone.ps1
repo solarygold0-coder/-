@@ -12,6 +12,9 @@ $intermediate = Join-Path $root "artifacts\publish\$Runtime"
 $release = Join-Path $root "release-standalone"
 $releaseExe = Join-Path $release "Saudi-Patient-Records.exe"
 
+if (Test-Path (Join-Path $root "PatientRecordsSaudi")) { throw "Legacy WinForms source must not exist in the v6 tree." }
+if (Get-ChildItem $root -Recurse -File -Include *.csproj,*.cs | Select-String -Pattern "LiteDB|System\.Windows\.Forms" -Quiet) { throw "Legacy LiteDB or WinForms code must not exist in the v6 tree." }
+
 if (Test-Path $intermediate) { Remove-Item $intermediate -Recurse -Force }
 if (Test-Path $release) { Remove-Item $release -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $intermediate, $release | Out-Null
@@ -62,6 +65,7 @@ $size = (Get-Item $releaseExe).Length
     "StartupLogin=Disabled; a named manager account is required before enabling"
     "DataProfile=Independent SaudiPatientRecordsV6; no automatic legacy copy"
     "Database=Encrypted SQLite (SQLCipher)"
+    "LegacyUI=None"
     "DigitalSignature=None (unsigned public-source build)"
     "SizeBytes=$size"
     "SHA256=$hash"

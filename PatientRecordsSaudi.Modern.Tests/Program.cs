@@ -74,6 +74,7 @@ namespace PatientRecordsSaudi.Tests
                     Patient one = db.AddPatient(NewPatient(id1, "مراجع الاختبار الأول", TestMobile(1)));
                     Patient two = db.AddPatient(NewPatient(id2, "مراجع الاختبار الثاني", TestMobile(2)));
                     Assert(one.FileNumber == 1 && two.FileNumber == 2, "Sequential file numbering starts at 1");
+                    bool invalidPatientBlocked = false; try { db.AddPatient(NewPatient("123", "بيانات غير صالحة", TestMobile(9))); } catch (InvalidOperationException) { invalidPatientBlocked = true; } Assert(invalidPatientBlocked, "Data layer rejects an invalid Saudi identity even when UI validation is bypassed");
                     AppSettings settings = db.GetSettings(); Assert(settings.VisitTypes.Count > 0 && settings.AppointmentStatuses.Contains("حضر"), "Default configurable lookups"); settings.VisitTypes.Add("زيارة اختبار"); settings.WorkDayStartMinutes = 7 * 60 + 30; settings.WorkDayEndMinutes = 16 * 60 + 30; settings.DefaultAppointmentMinutes = 45; settings.BackupIntervalHours = 6; db.SaveSettings(settings); AppSettings savedSettings = db.GetSettings(); Assert(savedSettings.VisitTypes.Contains("زيارة اختبار") && savedSettings.WorkDayStartMinutes == 450 && savedSettings.WorkDayEndMinutes == 990 && savedSettings.DefaultAppointmentMinutes == 45 && savedSettings.BackupIntervalHours == 6, "WPF operational settings persisted");
                     AppSettings invalidDuration = db.GetSettings(); invalidDuration.DefaultAppointmentMinutes = 0; bool invalidDurationBlocked = false; try { db.SaveSettings(invalidDuration); } catch (InvalidOperationException) { invalidDurationBlocked = true; } Assert(invalidDurationBlocked, "Invalid default appointment duration is rejected");
                     string attachmentSource = Path.Combine(temp, "test.pdf"); File.WriteAllText(attachmentSource, "%PDF-1.4 test attachment"); PatientAttachment attachment = db.AddAttachment(two.Id, attachmentSource, "نتيجة");
@@ -91,14 +92,16 @@ namespace PatientRecordsSaudi.Tests
                     Assert(duplicateBlocked, "Duplicate national ID blocked");
 
                     int daysToSunday = ((int)DayOfWeek.Sunday - (int)DateTime.Today.DayOfWeek + 7) % 7; if (daysToSunday == 0) daysToSunday = 7; DateTime sunday = DateTime.Today.AddDays(daysToSunday).AddHours(9);
-                    Appointment saved = db.AddAppointment(new Appointment { PatientId = two.Id, FileNumber = two.FileNumber, PatientName = two.FullName, Title = "مراجعة", VisitType = "مراجعة", StartsAt = sunday, DurationMinutes = 30, Status = "مؤكد" });
+                    Appointment saved = db.AddAppointment(new Appointment { PatientId = two.Id, FileNumber = 9999, PatientName = "لقطة خاطئة", Title = "مراجعة", VisitType = "مراجعة", StartsAt = sunday, DurationMinutes = 30, Status = "مؤكد" });
+                    Assert(saved.FileNumber == two.FileNumber && saved.PatientName == two.FullName, "Appointment patient snapshot is enforced from the referenced patient record");
                     db.MarkAppointmentNotified(saved.Id); Appointment statusChanged = db.GetAppointment(saved.Id) ?? throw new InvalidOperationException("Appointment missing in test."); statusChanged.Status = "بانتظار التأكيد"; db.UpdateAppointment(statusChanged);
                     Assert(db.GetAppointment(saved.Id)?.ReminderNotifiedAt == null, "Appointment reminder resets when an active status changes");
                     bool conflictBlocked = false;
                     try { db.AddAppointment(new Appointment { PatientId = three.Id, FileNumber = three.FileNumber, PatientName = three.FullName, Title = "متعارض", VisitType = "مراجعة", StartsAt = sunday.AddMinutes(15), DurationMinutes = 30, Status = "مؤكد" }); } catch (AppointmentConflictException) { conflictBlocked = true; }
                     Assert(conflictBlocked, "Overlapping appointment blocked");
                     Appointment cancelled = db.AddAppointment(new Appointment { PatientId = three.Id, FileNumber = three.FileNumber, PatientName = three.FullName, Title = "ملغي", VisitType = "مراجعة", StartsAt = sunday.AddMinutes(15), DurationMinutes = 30, Status = "ملغي" }); Assert(cancelled != null, "Cancelled appointment does not reserve the slot");
-                    PatientTask reminderTask = db.AddTask(new PatientTask { PatientId = three.Id, FileNumber = three.FileNumber, PatientName = three.FullName, Title = "متابعة", DueAt = sunday, Priority = "عادية" });
+                    PatientTask reminderTask = db.AddTask(new PatientTask { PatientId = three.Id, FileNumber = 9999, PatientName = "لقطة خاطئة", Title = "متابعة", DueAt = sunday, Priority = "عادية" });
+                    Assert(reminderTask.FileNumber == three.FileNumber && reminderTask.PatientName == three.FullName, "Task patient snapshot is enforced from the referenced patient record");
                     db.MarkTaskNotified(reminderTask.Id); PatientTask completedTask = db.GetPatientTasks(three.Id).First(x => x.Id == reminderTask.Id); completedTask.IsCompleted = true; db.UpdateTask(completedTask);
                     PatientTask reopenedTask = db.GetPatientTasks(three.Id).First(x => x.Id == reminderTask.Id); reopenedTask.IsCompleted = false; db.UpdateTask(reopenedTask);
                     Assert(db.GetPatientTasks(three.Id).First(x => x.Id == reminderTask.Id).ReminderNotifiedAt == null, "Task reminder resets when a task is reopened");
@@ -123,6 +126,7 @@ namespace PatientRecordsSaudi.Tests
                 using (var staffDb = new AppDatabase(temp, admin.MaterializeDatabasePassword(), employee.DisplayName, "موظف"))
                 {
                     bool settingsBlocked = false; try { staffDb.SaveSettings(staffDb.GetSettings()); } catch (UnauthorizedAccessException) { settingsBlocked = true; } Assert(settingsBlocked, "Admin-only settings are enforced in data layer");
+                    bool backupBlocked = false; try { new BackupService(temp).CreateBackup(Path.Combine(temp, "staff-backup"), staffDb); } catch (UnauthorizedAccessException) { backupBlocked = true; } Assert(backupBlocked, "Manual backup is blocked for non-manager accounts in the data layer");
                 }
                 RunTenThousandCapacityTest(temp);
                 employee.Dispose(); admin.Dispose();
