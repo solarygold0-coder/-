@@ -25,6 +25,14 @@ jobs:
         shell: powershell
         run: .\publish-standalone.ps1
 
+      - name: Capture actual WPF interface
+        shell: powershell
+        run: |
+          $image = Join-Path $PWD "release-standalone\Saudi-Patient-Records-v5.2.0-Actual-UI.png"
+          $process = Start-Process ".\release-standalone\Saudi-Patient-Records.exe" -ArgumentList @("--capture-ui", $image) -Wait -PassThru
+          if ($process.ExitCode -ne 0 -or -not (Test-Path $image)) { throw "Actual UI screenshot capture failed." }
+          if ((Get-Item $image).Length -lt 10000) { throw "Actual UI screenshot is unexpectedly small." }
+
       - name: Verify deliverable shape
         shell: powershell
         run: |
