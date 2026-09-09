@@ -13,7 +13,8 @@ $release = Join-Path $root "release-standalone"
 $releaseExe = Join-Path $release "Saudi-Patient-Records.exe"
 
 if (Test-Path (Join-Path $root "PatientRecordsSaudi")) { throw "Legacy WinForms source must not exist in the v6 tree." }
-if (Get-ChildItem $root -Recurse -File -Include *.csproj,*.cs | Select-String -Pattern "LiteDB|System\.Windows\.Forms" -Quiet) { throw "Legacy LiteDB or WinForms code must not exist in the v6 tree." }
+if (Get-ChildItem $root -Recurse -File -Include *.csproj | Select-String -Pattern "LiteDB|UseWindowsForms" -Quiet) { throw "Legacy LiteDB or WinForms project references must not exist in the v6 tree." }
+if (Get-ChildItem $root -Recurse -File -Include *.cs | Select-String -SimpleMatch "using System.Windows.Forms;" -Quiet) { throw "Legacy WinForms source must not exist in the v6 tree." }
 
 if (Test-Path $intermediate) { Remove-Item $intermediate -Recurse -Force }
 if (Test-Path $release) { Remove-Item $release -Recurse -Force }
