@@ -28,9 +28,9 @@ namespace PatientRecordsSaudi.Services
         private static readonly object NativeInitLock = new object();
         private static bool nativeInitialized;
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true, IgnoreReadOnlyProperties = true };
-        private SqliteConnection db;
-        private SqliteTransaction transaction;
-        private byte[] databasePasswordBytes;
+        private SqliteConnection? db;
+        private SqliteTransaction? transaction;
+        private byte[]? databasePasswordBytes;
         private string currentUser, currentRole;
 
         public string DataDirectory { get; private set; }
@@ -52,7 +52,7 @@ namespace PatientRecordsSaudi.Services
         public void SetCurrentUser(string user) { currentUser = string.IsNullOrWhiteSpace(user) ? "النظام" : user.Trim(); }
         public void SetCurrentSession(string user, string role) { SetCurrentUser(user); currentRole = string.IsNullOrWhiteSpace(role) ? "قراءة فقط" : role; }
         private void RequireWrite() { if (currentRole == "قراءة فقط") throw new UnauthorizedAccessException("الحساب بصلاحية قراءة فقط ولا يملك تعديل البيانات."); }
-        private void RequireAdmin() { if (currentRole != "مدير") throw new UnauthorizedAccessException("هذه العملية متاحة للمدير فقط."); }
+        private void RequireAdmin() { if (currentRole != "مدير" && currentRole != "مالك محلي") throw new UnauthorizedAccessException("هذه العملية متاحة للمدير فقط."); }
 
         private static void EnsureNativeInitialized()
         {
@@ -139,7 +139,7 @@ INSERT INTO meta(key,value) VALUES('schema_version',$version)
 
             string version = ScalarString("SELECT value FROM meta WHERE key='schema_version';");
             if (!int.TryParse(version, out int parsed) || parsed != SchemaVersion) throw new InvalidDataException("إصدار مخطط قاعدة SQLite غير مدعوم.");
-            AppSettings settings = QueryPayload<AppSettings>("SELECT payload FROM settings WHERE id=1;").FirstOrDefault();
+            AppSettings? settings = QueryPayload<AppSettings>("SELECT payload FROM settings WHERE id=1;").FirstOrDefault();
             if (settings == null) UpsertSettingsInternal(DefaultSettings());
             else if (EnsureSettingsDefaults(settings)) UpsertSettingsInternal(settings);
             long highest = ScalarLong("SELECT COALESCE(MAX(file_number),0) FROM patients;");
@@ -151,7 +151,7 @@ INSERT INTO meta(key,value) VALUES('schema_version',$version)
 
         public AppSettings GetSettings()
         {
-            AppSettings value = QueryPayload<AppSettings>("SELECT payload FROM settings WHERE id=1;").FirstOrDefault();
+            AppSettings? value = QueryPayload<AppSettings>("SELECT payload FROM settings WHERE id=1;").FirstOrDefault();
             if (value == null) { value = DefaultSettings(); UpsertSettingsInternal(value); }
             else if (EnsureSettingsDefaults(value)) UpsertSettingsInternal(value);
             return value;
@@ -190,11 +190,11 @@ INSERT INTO meta(key,value) VALUES('schema_version',$version)
             Checkpoint();
         }
 
-        public byte[] GetClinicLogo()
+        public byte[]? GetClinicLogo()
         {
             AppSettings settings = GetSettings(); if (string.IsNullOrWhiteSpace(settings.ClinicLogoStoredId)) return null;
             using (SqliteCommand cmd = Command("SELECT content FROM assets WHERE key='clinic_logo';"))
-            { object value = cmd.ExecuteScalar(); return value == null || value == DBNull.Value ? null : (byte[])value; }
+            { object? value = cmd.ExecuteScalar(); return value == null || value == DBNull.Value ? null : (byte[])value; }
         }
 
         public void RemoveClinicLogo()
@@ -259,7 +259,7 @@ INSERT INTO meta(key,value) VALUES('schema_version',$version)
             {
                 if (CountAllPatients() >= MaxPatients) throw new InvalidOperationException("وصل النظام إلى الحد الإداري المحدد وهو 10,000 مراجع.");
                 if (FindByNationalId(patient.NationalId, true) != null) throw new InvalidOperationException("يوجد مراجع مسجل مسبقًا بنفس رقم الهوية/الإقامة.");
-                Patient likely = FindLikelyDuplicate(patient.FullName, patient.DateOfBirth, patient.Mobile, null); if (likely != null) throw new DuplicatePatientException(likely);
+                Patient? likely = FindLikelyDuplicate(patient.FullName, patient.DateOfBirth, patient.Mobile, null); if (likely != null) throw new DuplicatePatientException(likely);
                 AppSettings settings = GetSettings(); patient.Id = Guid.NewGuid(); patient.FileNumber = settings.NextFileNumber; patient.CreatedAt = DateTime.Now; patient.UpdatedAt = patient.CreatedAt; patient.IsArchived = false;
                 InsertPatient(patient); settings.NextFileNumber++; settings.UpdatedAt = DateTime.Now; UpsertSettingsInternal(settings); AuditInternal("إضافة مراجع", "Patient", patient.Id.ToString(), patient.FileNumber, patient.FullName); return patient;
             }, true);
@@ -267,20 +267,45 @@ INSERT INTO meta(key,value) VALUES('schema_version',$version)
 
         public void UpdatePatient(Patient patient)
         {
-            RequireWrite(); if (patient == null) throw new ArgumentNullException(nameof(patient)); Patient existing = GetPatient(patient.Id);
+            RequireWrite(); if (patient == null) throw new ArgumentNullException(nameof(patient)); Patient? existing = GetPatient(patient.Id);
             if (existing == null) throw new InvalidOperationException("تعذر العثور على ملف المراجع.");
             if (existing.IsArchived) throw new InvalidOperationException("الملف مؤرشف ولا يمكن تعديله قبل استعادته بواسطة المدير.");
             patient.FileNumber = existing.FileNumber; patient.CreatedAt = existing.CreatedAt; patient.IsArchived = existing.IsArchived; patient.ArchivedAt = existing.ArchivedAt; patient.ArchiveReason = existing.ArchiveReason;
-            NormalizePatient(patient); Patient sameId = FindByNationalId(patient.NationalId, true);
+            NormalizePatient(patient); Patient? sameId = FindByNationalId(patient.NationalId, true);
             if (sameId != null && sameId.Id != patient.Id) throw new InvalidOperationException("رقم الهوية/الإقامة مستخدم في ملف آخر رقم " + sameId.FileNumber + ".");
-            Patient likely = FindLikelyDuplicate(patient.FullName, patient.DateOfBirth, patient.Mobile, patient.Id); if (likely != null) throw new DuplicatePatientException(likely);
+            Patient? likely = FindLikelyDuplicate(patient.FullName, patient.DateOfBirth, patient.Mobile, patient.Id); if (likely != null) throw new DuplicatePatientException(likely);
             InTransaction(() => { patient.UpdatedAt = DateTime.Now; UpdatePatientRow(patient); SyncPatientSnapshot(patient); AuditInternal("تعديل مراجع", "Patient", patient.Id.ToString(), patient.FileNumber, patient.FullName); }, true);
         }
 
         private static void NormalizePatient(Patient p)
         {
-            p.NationalId = SaudiValidation.NormalizeDigits(p.NationalId); p.Mobile = SaudiValidation.NormalizeSaudiMobile(p.Mobile); p.NormalizedName = SaudiValidation.NormalizeArabicName(p.FullName);
-            p.City = (p.City ?? "").Trim(); if (p.DateOfBirth.HasValue) p.DateOfBirth = p.DateOfBirth.Value.Date;
+            p.IdentityType = (p.IdentityType ?? string.Empty).Trim();
+            if (p.IdentityType != "هوية وطنية" && p.IdentityType != "إقامة") throw new InvalidOperationException("اختر نوع الهوية: هوية وطنية أو إقامة.");
+            p.NationalId = SaudiValidation.NormalizeDigits(p.NationalId);
+            if (!SaudiValidation.ValidateSaudiIdentity(p.NationalId, p.IdentityType, out string identityError)) throw new InvalidOperationException(identityError);
+            p.FullName = (p.FullName ?? string.Empty).Trim();
+            p.NormalizedName = SaudiValidation.NormalizeArabicName(p.FullName);
+            if (p.NormalizedName.Length < 3) throw new InvalidOperationException("اسم المراجع يجب ألا يقل عن ثلاثة أحرف.");
+            if (p.FullName.Length > 150) throw new InvalidOperationException("اسم المراجع يتجاوز 150 حرفًا.");
+            p.Mobile = SaudiValidation.NormalizeSaudiMobile(p.Mobile);
+            if (!SaudiValidation.ValidateSaudiMobile(p.Mobile, true, out string mobileError)) throw new InvalidOperationException(mobileError);
+            p.City = (p.City ?? string.Empty).Trim();
+            if (p.City.Length < 2 || p.City.Length > 80) throw new InvalidOperationException("أدخل المدينة بصورة صحيحة.");
+            if (p.DateOfBirth.HasValue)
+            {
+                p.DateOfBirth = p.DateOfBirth.Value.Date;
+                if (p.DateOfBirth.Value > DateTime.Today) throw new InvalidOperationException("تاريخ الميلاد لا يمكن أن يكون في المستقبل.");
+            }
+            p.Nationality = (p.Nationality ?? string.Empty).Trim();
+            p.Gender = (p.Gender ?? string.Empty).Trim();
+            p.AlternatePhone = SaudiValidation.NormalizeDigits(p.AlternatePhone).Trim();
+            p.Address = (p.Address ?? string.Empty).Trim();
+            p.EmergencyContact = (p.EmergencyContact ?? string.Empty).Trim();
+            p.EmergencyPhone = SaudiValidation.NormalizeDigits(p.EmergencyPhone).Trim();
+            p.BloodType = (p.BloodType ?? string.Empty).Trim();
+            p.Allergies = (p.Allergies ?? string.Empty).Trim();
+            p.ChronicConditions = (p.ChronicConditions ?? string.Empty).Trim();
+            p.Notes = (p.Notes ?? string.Empty).Trim();
         }
 
         private void InsertPatient(Patient p)
@@ -311,7 +336,7 @@ VALUES($id,$file,$national,$name,$mobile,$city,$birth,$created,$last,$archived,$
         public void ArchivePatient(Guid id, string reason) { ArchivePatient(id, reason, true); }
         public void ArchivePatient(Guid id, string reason, bool closeFutureItems)
         {
-            RequireAdmin(); Patient p = GetPatient(id); if (p == null) return;
+            RequireAdmin(); Patient? p = GetPatient(id); if (p == null) return;
             InTransaction(() =>
             {
                 p.IsArchived = true; p.ArchivedAt = DateTime.Now; p.ArchiveReason = (reason ?? "").Trim(); p.UpdatedAt = DateTime.Now; UpdatePatientRow(p);
@@ -325,12 +350,12 @@ VALUES($id,$file,$national,$name,$mobile,$city,$birth,$created,$last,$archived,$
             }, true);
         }
 
-        public void RestorePatient(Guid id) { RequireAdmin(); Patient p = GetPatient(id); if (p == null) return; p.IsArchived = false; p.ArchivedAt = null; p.ArchiveReason = ""; p.UpdatedAt = DateTime.Now; InTransaction(() => { UpdatePatientRow(p); AuditInternal("استعادة مراجع", "Patient", p.Id.ToString(), p.FileNumber, p.FullName); }, true); }
-        public Patient GetPatient(Guid id) { return QueryPayload<Patient>("SELECT payload FROM patients WHERE id=$id;", ("$id", id.ToString("N"))).FirstOrDefault(); }
-        public Patient FindByFileNumber(long number, bool includeArchived) { return QueryPayload<Patient>("SELECT payload FROM patients WHERE file_number=$n" + (includeArchived ? "" : " AND is_archived=0") + ";", ("$n", number)).FirstOrDefault(); }
-        public Patient FindByNationalId(string id, bool includeArchived) { string value = SaudiValidation.NormalizeDigits(id); return QueryPayload<Patient>("SELECT payload FROM patients WHERE national_id=$id" + (includeArchived ? "" : " AND is_archived=0") + ";", ("$id", value)).FirstOrDefault(); }
+        public void RestorePatient(Guid id) { RequireAdmin(); Patient? p = GetPatient(id); if (p == null) return; p.IsArchived = false; p.ArchivedAt = null; p.ArchiveReason = ""; p.UpdatedAt = DateTime.Now; InTransaction(() => { UpdatePatientRow(p); AuditInternal("استعادة مراجع", "Patient", p.Id.ToString(), p.FileNumber, p.FullName); }, true); }
+        public Patient? GetPatient(Guid id) { return QueryPayload<Patient>("SELECT payload FROM patients WHERE id=$id;", ("$id", id.ToString("N"))).FirstOrDefault(); }
+        public Patient? FindByFileNumber(long number, bool includeArchived) { return QueryPayload<Patient>("SELECT payload FROM patients WHERE file_number=$n" + (includeArchived ? "" : " AND is_archived=0") + ";", ("$n", number)).FirstOrDefault(); }
+        public Patient? FindByNationalId(string id, bool includeArchived) { string value = SaudiValidation.NormalizeDigits(id); return QueryPayload<Patient>("SELECT payload FROM patients WHERE national_id=$id" + (includeArchived ? "" : " AND is_archived=0") + ";", ("$id", value)).FirstOrDefault(); }
 
-        private Patient FindLikelyDuplicate(string name, DateTime? birth, string mobile, Guid? exceptId)
+        private Patient? FindLikelyDuplicate(string name, DateTime? birth, string mobile, Guid? exceptId)
         {
             string normalized = SaudiValidation.NormalizeArabicName(name), phone = SaudiValidation.NormalizeSaudiMobile(mobile); var candidates = new Dictionary<Guid, Patient>();
             foreach (Patient p in QueryPayload<Patient>("SELECT payload FROM patients WHERE normalized_name=$name OR mobile=$mobile OR date_of_birth_ticks=$birth;", ("$name", normalized), ("$mobile", phone), ("$birth", DbTicks(birth)))) candidates[p.Id] = p;
@@ -363,8 +388,14 @@ VALUES($id,$file,$national,$name,$mobile,$city,$birth,$created,$last,$archived,$
             else if (mode == "الاسم") { where = "normalized_name LIKE $name"; parameters.Add(("$name", "%" + name + "%")); }
             else { where = "normalized_name LIKE $name OR mobile=$mobile OR national_id=$national"; parameters.Add(("$name", "%" + name + "%")); parameters.Add(("$mobile", phone)); parameters.Add(("$national", digits)); if (long.TryParse(digits, out long n)) { where += " OR file_number=$file"; parameters.Add(("$file", n)); } }
             if (!includeArchived) where = "(" + where + ") AND is_archived=0";
-            List<Patient> result = QueryPayload<Patient>("SELECT payload FROM patients WHERE " + where + " LIMIT $limit;", parameters.Concat(new[] { ("$limit", (object)(q.Length == 0 ? DefaultPatientListLimit : MaxPatients)) }).ToArray());
-            if (sort == "الاسم") return result.OrderBy(p => p.FullName).ToList(); if (sort == "الأحدث") return result.OrderByDescending(p => p.CreatedAt).ToList(); if (sort == "آخر مراجعة") return result.OrderByDescending(p => p.LastVisitAt ?? DateTime.MinValue).ToList(); return result.OrderBy(p => p.FileNumber).ToList();
+            string orderBy = sort switch
+            {
+                "الاسم" => "normalized_name COLLATE NOCASE, file_number",
+                "الأحدث" => "created_ticks DESC, file_number DESC",
+                "آخر مراجعة" => "last_visit_ticks DESC, file_number",
+                _ => "file_number"
+            };
+            return QueryPayload<Patient>("SELECT payload FROM patients WHERE " + where + " ORDER BY " + orderBy + " LIMIT $limit;", parameters.Concat(new[] { ("$limit", (object)(q.Length == 0 ? DefaultPatientListLimit : MaxPatients)) }).ToArray());
         }
 
         public int CountActivePatients() { return checked((int)ScalarLong("SELECT COUNT(*) FROM patients WHERE is_archived=0;")); }
@@ -373,7 +404,7 @@ VALUES($id,$file,$national,$name,$mobile,$city,$birth,$created,$last,$archived,$
 
         public PatientAttachment AddAttachment(Guid patientId, string sourcePath, string category)
         {
-            RequireWrite(); Patient patient = GetPatient(patientId); if (patient == null) throw new InvalidOperationException("ملف المراجع غير موجود."); if (patient.IsArchived) throw new InvalidOperationException("لا يمكن إضافة مرفق إلى ملف مؤرشف قبل استعادته.");
+            RequireWrite(); Patient? patient = GetPatient(patientId); if (patient == null) throw new InvalidOperationException("ملف المراجع غير موجود."); if (patient.IsArchived) throw new InvalidOperationException("لا يمكن إضافة مرفق إلى ملف مؤرشف قبل استعادته.");
             if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath)) throw new FileNotFoundException("تعذر العثور على الملف المحدد."); string extension = Path.GetExtension(sourcePath).ToLowerInvariant();
             if (!AllowedAttachmentExtensions.Contains(extension)) throw new InvalidOperationException("نوع الملف غير مسموح. الأنواع المقبولة: PDF وJPG وPNG وDOCX.");
             var file = new FileInfo(sourcePath); if (file.Length <= 0) throw new InvalidOperationException("الملف المحدد فارغ."); if (file.Length > MaxAttachmentBytes) throw new InvalidOperationException("حجم المرفق يتجاوز الحد الأقصى 10 ميجابايت."); ValidateAttachmentSignature(sourcePath, extension);
@@ -391,15 +422,15 @@ VALUES($id,$file,$national,$name,$mobile,$city,$birth,$created,$last,$archived,$
             Execute("UPDATE attachments SET is_deleted=$deleted,deleted_ticks=$deletedAt,payload=$payload WHERE id=$id;", ("$deleted", a.IsDeleted ? 1 : 0), ("$deletedAt", DbTicks(a.DeletedAt)), ("$payload", Serialize(a)), ("$id", a.Id.ToString("N")));
         }
 
-        private PatientAttachment GetAttachment(Guid id) { return QueryPayload<PatientAttachment>("SELECT payload FROM attachments WHERE id=$id;", ("$id", id.ToString("N"))).FirstOrDefault(); }
+        private PatientAttachment? GetAttachment(Guid id) { return QueryPayload<PatientAttachment>("SELECT payload FROM attachments WHERE id=$id;", ("$id", id.ToString("N"))).FirstOrDefault(); }
         public List<PatientAttachment> GetAttachments(Guid patientId, bool includeDeleted) { return QueryPayload<PatientAttachment>("SELECT payload FROM attachments WHERE patient_id=$id" + (includeDeleted ? "" : " AND is_deleted=0") + ";", ("$id", patientId.ToString("N"))).OrderByDescending(x => x.UploadedAt).ToList(); }
-        public void DeleteAttachment(Guid id) { RequireWrite(); PatientAttachment a = GetAttachment(id); if (a == null || a.IsDeleted) return; a.IsDeleted = true; a.DeletedAt = DateTime.Now; a.DeletedBy = currentUser; InTransaction(() => { UpdateAttachmentRow(a); AuditInternal("نقل مرفق إلى المحذوفات", "Attachment", id.ToString(), a.FileNumber, a.OriginalName); }, true); }
-        public void RestoreAttachment(Guid id) { RequireWrite(); PatientAttachment a = GetAttachment(id); if (a == null || !a.IsDeleted) return; if (ScalarLong("SELECT COUNT(*) FROM attachments WHERE id=$id AND length(content)>0;", ("$id", id.ToString("N"))) != 1) throw new InvalidDataException("ملف المرفق الداخلي غير موجود."); a.IsDeleted = false; a.DeletedAt = null; a.DeletedBy = ""; InTransaction(() => { UpdateAttachmentRow(a); AuditInternal("استعادة مرفق", "Attachment", id.ToString(), a.FileNumber, a.OriginalName); }, true); }
+        public void DeleteAttachment(Guid id) { RequireWrite(); PatientAttachment? a = GetAttachment(id); if (a == null || a.IsDeleted) return; a.IsDeleted = true; a.DeletedAt = DateTime.Now; a.DeletedBy = currentUser; InTransaction(() => { UpdateAttachmentRow(a); AuditInternal("نقل مرفق إلى المحذوفات", "Attachment", id.ToString(), a.FileNumber, a.OriginalName); }, true); }
+        public void RestoreAttachment(Guid id) { RequireWrite(); PatientAttachment? a = GetAttachment(id); if (a == null || !a.IsDeleted) return; if (ScalarLong("SELECT COUNT(*) FROM attachments WHERE id=$id AND length(content)>0;", ("$id", id.ToString("N"))) != 1) throw new InvalidDataException("ملف المرفق الداخلي غير موجود."); a.IsDeleted = false; a.DeletedAt = null; a.DeletedBy = ""; InTransaction(() => { UpdateAttachmentRow(a); AuditInternal("استعادة مرفق", "Attachment", id.ToString(), a.FileNumber, a.OriginalName); }, true); }
 
         public string ExportAttachmentToTemporaryFile(Guid id)
         {
-            PatientAttachment a = GetAttachment(id); if (a == null || a.IsDeleted) throw new InvalidOperationException("المرفق غير متاح."); byte[] content;
-            using (SqliteCommand cmd = Command("SELECT content FROM attachments WHERE id=$id;", ("$id", id.ToString("N")))) { object value = cmd.ExecuteScalar(); if (value == null || value == DBNull.Value) throw new InvalidDataException("ملف المرفق الداخلي غير موجود."); content = (byte[])value; }
+            PatientAttachment? a = GetAttachment(id); if (a == null || a.IsDeleted) throw new InvalidOperationException("المرفق غير متاح."); byte[] content;
+            using (SqliteCommand cmd = Command("SELECT content FROM attachments WHERE id=$id;", ("$id", id.ToString("N")))) { object? value = cmd.ExecuteScalar(); if (value == null || value == DBNull.Value) throw new InvalidDataException("ملف المرفق الداخلي غير موجود."); content = (byte[])value; }
             if (!string.Equals(HashBytes(content), a.Sha256, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("فشل فحص سلامة المرفق."); EnsurePrivateDirectory(TemporaryAttachmentDirectory); string output = Path.Combine(TemporaryAttachmentDirectory, a.Id.ToString("N") + "_" + SafeFileName(a.OriginalName)); File.WriteAllBytes(output, content); TryRestrictFileToCurrentUser(output); TryMarkTemporary(output); Audit("فتح مرفق", "Attachment", id.ToString(), a.FileNumber, a.OriginalName); Checkpoint(); return output;
         }
 
@@ -456,12 +487,12 @@ VALUES($id,$file,$national,$name,$mobile,$city,$birth,$created,$last,$archived,$
 
         public void UpdateAppointment(Appointment a)
         {
-            RequireWrite(); if (a == null) throw new ArgumentNullException(nameof(a)); InTransaction(() => { Appointment old = GetAppointment(a.Id); if (old == null) throw new InvalidOperationException("الموعد غير موجود."); ValidateAppointmentAvailability(a); if (old.StartsAt != a.StartsAt || (old.Status != a.Status && a.Status != "ملغي")) a.ReminderNotifiedAt = null; a.CreatedAt = old.CreatedAt; a.UpdatedAt = DateTime.Now; UpdateAppointmentRow(a); RecalculateLastVisit(a.PatientId); if (old.PatientId != a.PatientId) RecalculateLastVisit(old.PatientId); AuditInternal("تعديل موعد", "Appointment", a.Id.ToString(), a.FileNumber, a.Title); }, true);
+            RequireWrite(); if (a == null) throw new ArgumentNullException(nameof(a)); InTransaction(() => { Appointment? old = GetAppointment(a.Id); if (old == null) throw new InvalidOperationException("الموعد غير موجود."); ValidateAppointmentAvailability(a); if (old.StartsAt != a.StartsAt || (old.Status != a.Status && a.Status != "ملغي")) a.ReminderNotifiedAt = null; a.CreatedAt = old.CreatedAt; a.UpdatedAt = DateTime.Now; UpdateAppointmentRow(a); RecalculateLastVisit(a.PatientId); if (old.PatientId != a.PatientId) RecalculateLastVisit(old.PatientId); AuditInternal("تعديل موعد", "Appointment", a.Id.ToString(), a.FileNumber, a.Title); }, true);
         }
 
-        public void DeleteAppointment(Guid id) { RequireAdmin(); Appointment a = GetAppointment(id); if (a == null || a.IsDeleted) return; a.IsDeleted = true; a.DeletedAt = DateTime.Now; a.DeletedBy = currentUser; a.UpdatedAt = DateTime.Now; InTransaction(() => { UpdateAppointmentRow(a); RecalculateLastVisit(a.PatientId); AuditInternal("نقل موعد إلى المحذوفات", "Appointment", id.ToString(), a.FileNumber, a.Title); }, true); }
-        public void RestoreAppointment(Guid id) { RequireAdmin(); Appointment a = GetAppointment(id); if (a == null || !a.IsDeleted) return; a.IsDeleted = false; a.DeletedAt = null; a.DeletedBy = ""; a.UpdatedAt = DateTime.Now; InTransaction(() => { ValidateAppointmentAvailability(a); UpdateAppointmentRow(a); RecalculateLastVisit(a.PatientId); AuditInternal("استعادة موعد", "Appointment", id.ToString(), a.FileNumber, a.Title); }, true); }
-        public Appointment GetAppointment(Guid id) { return QueryPayload<Appointment>("SELECT payload FROM appointments WHERE id=$id;", ("$id", id.ToString("N"))).FirstOrDefault(); }
+        public void DeleteAppointment(Guid id) { RequireAdmin(); Appointment? a = GetAppointment(id); if (a == null || a.IsDeleted) return; a.IsDeleted = true; a.DeletedAt = DateTime.Now; a.DeletedBy = currentUser; a.UpdatedAt = DateTime.Now; InTransaction(() => { UpdateAppointmentRow(a); RecalculateLastVisit(a.PatientId); AuditInternal("نقل موعد إلى المحذوفات", "Appointment", id.ToString(), a.FileNumber, a.Title); }, true); }
+        public void RestoreAppointment(Guid id) { RequireAdmin(); Appointment? a = GetAppointment(id); if (a == null || !a.IsDeleted) return; a.IsDeleted = false; a.DeletedAt = null; a.DeletedBy = ""; a.UpdatedAt = DateTime.Now; InTransaction(() => { ValidateAppointmentAvailability(a); UpdateAppointmentRow(a); RecalculateLastVisit(a.PatientId); AuditInternal("استعادة موعد", "Appointment", id.ToString(), a.FileNumber, a.Title); }, true); }
+        public Appointment? GetAppointment(Guid id) { return QueryPayload<Appointment>("SELECT payload FROM appointments WHERE id=$id;", ("$id", id.ToString("N"))).FirstOrDefault(); }
 
         private void InsertAppointment(Appointment a) { Execute("INSERT INTO appointments(id,patient_id,file_number,starts_ticks,duration_minutes,status,is_deleted,reminder_ticks,deleted_ticks,payload) VALUES($id,$patient,$file,$start,$duration,$status,$deleted,$reminder,$deletedAt,$payload);", AppointmentParameters(a)); }
         private void UpdateAppointmentRow(Appointment a) { Execute("UPDATE appointments SET patient_id=$patient,file_number=$file,starts_ticks=$start,duration_minutes=$duration,status=$status,is_deleted=$deleted,reminder_ticks=$reminder,deleted_ticks=$deletedAt,payload=$payload WHERE id=$id;", AppointmentParameters(a)); }
@@ -469,13 +500,19 @@ VALUES($id,$file,$national,$name,$mobile,$city,$birth,$created,$last,$archived,$
 
         public void ValidateAppointmentAvailability(Appointment a)
         {
-            if (a == null) throw new ArgumentNullException(nameof(a)); if (a.IsDeleted) return; Patient patient = GetPatient(a.PatientId); if (patient == null) throw new InvalidOperationException("ملف المراجع غير موجود."); if (patient.IsArchived) throw new InvalidOperationException("لا يمكن حجز أو تعديل موعد لملف مؤرشف قبل استعادته."); if (a.DurationMinutes <= 0 || a.DurationMinutes > 12 * 60) throw new InvalidOperationException("مدة الموعد غير صحيحة."); Appointment stored = a.Id == Guid.Empty ? null : GetAppointment(a.Id); bool unchangedPastTime = stored != null && stored.StartsAt == a.StartsAt; if (!unchangedPastTime && a.StartsAt < DateTime.Now.AddMinutes(-1)) throw new InvalidOperationException("لا يمكن إنشاء أو نقل موعد إلى وقت سابق."); ValidateAppointmentSlot(a.StartsAt, a.DurationMinutes, a.Status, a.Id);
+            if (a == null) throw new ArgumentNullException(nameof(a)); if (a.IsDeleted) return;
+            Patient? patient = GetPatient(a.PatientId); if (patient == null) throw new InvalidOperationException("ملف المراجع غير موجود."); if (patient.IsArchived) throw new InvalidOperationException("لا يمكن حجز أو تعديل موعد لملف مؤرشف قبل استعادته.");
+            a.FileNumber = patient.FileNumber; a.PatientName = patient.FullName;
+            a.Title = (a.Title ?? string.Empty).Trim(); if (a.Title.Length < 2 || a.Title.Length > 120) throw new InvalidOperationException("عنوان الموعد يجب أن يكون بين حرفين و120 حرفًا.");
+            AppSettings settings = GetSettings(); if (!settings.VisitTypes.Contains(a.VisitType)) throw new InvalidOperationException("نوع الزيارة غير صحيح."); if (!settings.AppointmentStatuses.Contains(a.Status)) throw new InvalidOperationException("حالة الموعد غير صحيحة.");
+            if (a.DurationMinutes < 5 || a.DurationMinutes > 12 * 60) throw new InvalidOperationException("مدة الموعد غير صحيحة.");
+            Appointment? stored = a.Id == Guid.Empty ? null : GetAppointment(a.Id); bool unchangedPastTime = stored != null && stored.StartsAt == a.StartsAt; if (!unchangedPastTime && a.StartsAt < DateTime.Now.AddMinutes(-1)) throw new InvalidOperationException("لا يمكن إنشاء أو نقل موعد إلى وقت سابق."); ValidateAppointmentSlot(a.StartsAt, a.DurationMinutes, a.Status, a.Id);
         }
 
         private void ValidateAppointmentSlot(DateTime startsAt, int durationMinutes, string status, Guid ignoredAppointmentId)
         {
             if (!SaudiValidation.IsOfficialWorkingDay(startsAt)) throw new InvalidOperationException("لا يمكن حجز موعد يوم الجمعة أو السبت."); if (ScalarLong("SELECT COUNT(*) FROM closures WHERE date_ticks=$date;", ("$date", startsAt.Date.Ticks)) > 0) throw new InvalidOperationException("هذا اليوم مسجل كإجازة أو يوم إغلاق للمنشأة."); AppSettings s = GetSettings(); int start = startsAt.Hour * 60 + startsAt.Minute, endMinutes = start + durationMinutes; if (start < s.WorkDayStartMinutes || endMinutes > s.WorkDayEndMinutes) throw new InvalidOperationException("الموعد خارج ساعات الدوام المحددة في الإعدادات."); if (status == "ملغي") return; DateTime end = startsAt.AddMinutes(durationMinutes), dayEnd = startsAt.Date.AddDays(1);
-            Appointment conflict = QueryPayload<Appointment>("SELECT payload FROM appointments WHERE starts_ticks >= $dayStart AND starts_ticks < $dayEnd AND is_deleted=0;", ("$dayStart", startsAt.Date.Ticks), ("$dayEnd", dayEnd.Ticks)).FirstOrDefault(x => x.Id != ignoredAppointmentId && x.Status != "ملغي" && x.StartsAt < end && x.StartsAt.AddMinutes(x.DurationMinutes) > startsAt); if (conflict != null) throw new AppointmentConflictException(conflict);
+            Appointment? conflict = QueryPayload<Appointment>("SELECT payload FROM appointments WHERE starts_ticks >= $dayStart AND starts_ticks < $dayEnd AND is_deleted=0;", ("$dayStart", startsAt.Date.Ticks), ("$dayEnd", dayEnd.Ticks)).FirstOrDefault(x => x.Id != ignoredAppointmentId && x.Status != "ملغي" && x.StartsAt < end && x.StartsAt.AddMinutes(x.DurationMinutes) > startsAt); if (conflict != null) throw new AppointmentConflictException(conflict);
         }
 
         public List<Appointment> GetAppointments(DateTime? from, DateTime? to) { return GetAppointments(from, to, false); }
@@ -493,11 +530,18 @@ VALUES($id,$file,$national,$name,$mobile,$city,$birth,$created,$last,$archived,$
         }
 
         public PatientTask AddTask(PatientTask t) { RequireWrite(); ValidateTask(t); t.Id = Guid.NewGuid(); t.CreatedAt = DateTime.Now; t.UpdatedAt = t.CreatedAt; t.IsDeleted = false; InTransaction(() => { InsertTask(t); AuditInternal("إضافة مهمة", "Task", t.Id.ToString(), t.FileNumber, t.Title); }, true); return t; }
-        public void UpdateTask(PatientTask t) { RequireWrite(); ValidateTask(t); PatientTask old = GetTask(t.Id); if (old == null) throw new InvalidOperationException("المهمة غير موجودة."); if (old.DueAt != t.DueAt || (old.IsCompleted && !t.IsCompleted)) t.ReminderNotifiedAt = null; t.CreatedAt = old.CreatedAt; t.UpdatedAt = DateTime.Now; InTransaction(() => { UpdateTaskRow(t); AuditInternal("تعديل مهمة", "Task", t.Id.ToString(), t.FileNumber, t.Title); }, true); }
-        public void DeleteTask(Guid id) { RequireAdmin(); PatientTask t = GetTask(id); if (t == null || t.IsDeleted) return; t.IsDeleted = true; t.DeletedAt = DateTime.Now; t.DeletedBy = currentUser; t.UpdatedAt = DateTime.Now; InTransaction(() => { UpdateTaskRow(t); AuditInternal("نقل مهمة إلى المحذوفات", "Task", id.ToString(), t.FileNumber, t.Title); }, true); }
-        public void RestoreTask(Guid id) { RequireAdmin(); PatientTask t = GetTask(id); if (t == null || !t.IsDeleted) return; t.IsDeleted = false; t.DeletedAt = null; t.DeletedBy = ""; t.UpdatedAt = DateTime.Now; InTransaction(() => { UpdateTaskRow(t); AuditInternal("استعادة مهمة", "Task", id.ToString(), t.FileNumber, t.Title); }, true); }
-        private PatientTask GetTask(Guid id) { return QueryPayload<PatientTask>("SELECT payload FROM tasks WHERE id=$id;", ("$id", id.ToString("N"))).FirstOrDefault(); }
-        private void ValidateTask(PatientTask t) { if (t == null) throw new ArgumentNullException(nameof(t)); if (string.IsNullOrWhiteSpace(t.Title)) throw new InvalidOperationException("عنوان المهمة مطلوب."); Patient p = GetPatient(t.PatientId); if (p == null) throw new InvalidOperationException("ملف المراجع غير موجود."); if (p.IsArchived) throw new InvalidOperationException("لا يمكن إضافة أو تعديل مهمة لملف مؤرشف قبل استعادته."); }
+        public void UpdateTask(PatientTask t) { RequireWrite(); ValidateTask(t); PatientTask? old = GetTask(t.Id); if (old == null) throw new InvalidOperationException("المهمة غير موجودة."); if (old.DueAt != t.DueAt || (old.IsCompleted && !t.IsCompleted)) t.ReminderNotifiedAt = null; t.CreatedAt = old.CreatedAt; t.UpdatedAt = DateTime.Now; InTransaction(() => { UpdateTaskRow(t); AuditInternal("تعديل مهمة", "Task", t.Id.ToString(), t.FileNumber, t.Title); }, true); }
+        public void DeleteTask(Guid id) { RequireAdmin(); PatientTask? t = GetTask(id); if (t == null || t.IsDeleted) return; t.IsDeleted = true; t.DeletedAt = DateTime.Now; t.DeletedBy = currentUser; t.UpdatedAt = DateTime.Now; InTransaction(() => { UpdateTaskRow(t); AuditInternal("نقل مهمة إلى المحذوفات", "Task", id.ToString(), t.FileNumber, t.Title); }, true); }
+        public void RestoreTask(Guid id) { RequireAdmin(); PatientTask? t = GetTask(id); if (t == null || !t.IsDeleted) return; t.IsDeleted = false; t.DeletedAt = null; t.DeletedBy = ""; t.UpdatedAt = DateTime.Now; InTransaction(() => { UpdateTaskRow(t); AuditInternal("استعادة مهمة", "Task", id.ToString(), t.FileNumber, t.Title); }, true); }
+        private PatientTask? GetTask(Guid id) { return QueryPayload<PatientTask>("SELECT payload FROM tasks WHERE id=$id;", ("$id", id.ToString("N"))).FirstOrDefault(); }
+        private void ValidateTask(PatientTask t)
+        {
+            if (t == null) throw new ArgumentNullException(nameof(t));
+            t.Title = (t.Title ?? string.Empty).Trim(); if (t.Title.Length < 2 || t.Title.Length > 120) throw new InvalidOperationException("عنوان المهمة يجب أن يكون بين حرفين و120 حرفًا.");
+            Patient? p = GetPatient(t.PatientId); if (p == null) throw new InvalidOperationException("ملف المراجع غير موجود."); if (p.IsArchived) throw new InvalidOperationException("لا يمكن إضافة أو تعديل مهمة لملف مؤرشف قبل استعادته.");
+            t.FileNumber = p.FileNumber; t.PatientName = p.FullName;
+            if (!GetSettings().TaskPriorities.Contains(t.Priority)) throw new InvalidOperationException("أولوية المهمة غير صحيحة.");
+        }
         private void InsertTask(PatientTask t) { Execute("INSERT INTO tasks(id,patient_id,file_number,due_ticks,is_completed,is_deleted,reminder_ticks,deleted_ticks,payload) VALUES($id,$patient,$file,$due,$completed,$deleted,$reminder,$deletedAt,$payload);", TaskParameters(t)); }
         private void UpdateTaskRow(PatientTask t) { Execute("UPDATE tasks SET patient_id=$patient,file_number=$file,due_ticks=$due,is_completed=$completed,is_deleted=$deleted,reminder_ticks=$reminder,deleted_ticks=$deletedAt,payload=$payload WHERE id=$id;", TaskParameters(t)); }
         private (string, object)[] TaskParameters(PatientTask t) => new[] { ("$id", (object)t.Id.ToString("N")), ("$patient", t.PatientId.ToString("N")), ("$file", t.FileNumber), ("$due", t.DueAt.Ticks), ("$completed", t.IsCompleted ? 1 : 0), ("$deleted", t.IsDeleted ? 1 : 0), ("$reminder", DbTicks(t.ReminderNotifiedAt)), ("$deletedAt", DbTicks(t.DeletedAt)), ("$payload", Serialize(t)) };
@@ -505,8 +549,8 @@ VALUES($id,$file,$national,$name,$mobile,$city,$birth,$created,$last,$archived,$
         public List<PatientTask> GetPatientTasks(Guid id) { return QueryPayload<PatientTask>("SELECT payload FROM tasks WHERE patient_id=$id AND is_deleted=0 ORDER BY due_ticks DESC;", ("$id", id.ToString("N"))); }
         public List<PatientTask> GetDeletedTasks() { return QueryPayload<PatientTask>("SELECT payload FROM tasks WHERE is_deleted=1 ORDER BY deleted_ticks DESC;"); }
 
-        public Appointment GetNextUnnotifiedAppointment(DateTime from, DateTime to) { return GetUnnotifiedAppointments(from, to, 1).FirstOrDefault(); }
-        public PatientTask GetNextUnnotifiedTask(DateTime from, DateTime to) { return GetUnnotifiedTasks(from, to, 1).FirstOrDefault(); }
+        public Appointment? GetNextUnnotifiedAppointment(DateTime from, DateTime to) { return GetUnnotifiedAppointments(from, to, 1).FirstOrDefault(); }
+        public PatientTask? GetNextUnnotifiedTask(DateTime from, DateTime to) { return GetUnnotifiedTasks(from, to, 1).FirstOrDefault(); }
         public List<Appointment> GetUnnotifiedAppointments(DateTime from, DateTime to, int maximum) { return QueryPayload<Appointment>("SELECT payload FROM appointments WHERE is_deleted=0 AND reminder_ticks IS NULL AND starts_ticks >= $from AND starts_ticks <= $to AND status <> 'ملغي' ORDER BY starts_ticks LIMIT $limit;", ("$from", from.Ticks), ("$to", to.Ticks), ("$limit", Math.Max(1, maximum))); }
         public List<PatientTask> GetUnnotifiedTasks(DateTime from, DateTime to, int maximum) { return QueryPayload<PatientTask>("SELECT payload FROM tasks WHERE is_deleted=0 AND is_completed=0 AND reminder_ticks IS NULL AND due_ticks >= $from AND due_ticks <= $to ORDER BY due_ticks LIMIT $limit;", ("$from", from.Ticks), ("$to", to.Ticks), ("$limit", Math.Max(1, maximum))); }
         public void MarkAppointmentNotified(Guid id) { Appointment a = GetAppointment(id); if (a != null) { a.ReminderNotifiedAt = DateTime.Now; UpdateAppointmentRow(a); Checkpoint(); } }
@@ -514,7 +558,7 @@ VALUES($id,$file,$national,$name,$mobile,$city,$birth,$created,$last,$archived,$
 
         private void RecalculateLastVisit(Guid patientId)
         {
-            Patient p = GetPatient(patientId); if (p == null) return; Appointment last = QueryPayload<Appointment>("SELECT payload FROM appointments WHERE patient_id=$id AND is_deleted=0 AND status='حضر' AND starts_ticks <= $now ORDER BY starts_ticks DESC LIMIT 1;", ("$id", patientId.ToString("N")), ("$now", DateTime.Now.Ticks)).FirstOrDefault(); p.LastVisitAt = last == null ? (DateTime?)null : last.StartsAt; p.UpdatedAt = DateTime.Now; UpdatePatientRow(p);
+            Patient? p = GetPatient(patientId); if (p == null) return; Appointment? last = QueryPayload<Appointment>("SELECT payload FROM appointments WHERE patient_id=$id AND is_deleted=0 AND status='حضر' AND starts_ticks <= $now ORDER BY starts_ticks DESC LIMIT 1;", ("$id", patientId.ToString("N")), ("$now", DateTime.Now.Ticks)).FirstOrDefault(); p.LastVisitAt = last?.StartsAt; p.UpdatedAt = DateTime.Now; UpdatePatientRow(p);
         }
 
         public List<Patient> GetInventoryCandidates(DateTime asOf)
@@ -526,7 +570,7 @@ VALUES($id,$file,$national,$name,$mobile,$city,$birth,$created,$last,$archived,$
         public void UpdateBackupStatus(string status, DateTime? successAt) { AppSettings s = GetSettings(); if (successAt.HasValue) s.LastAutoBackupAt = successAt; s.LastBackupStatus = status ?? ""; s.UpdatedAt = DateTime.Now; UpsertSettingsInternal(s); Checkpoint(); }
         public List<ClosureDate> GetClosures() { return QueryPayload<ClosureDate>("SELECT payload FROM closures ORDER BY date_ticks;"); }
         public void AddClosure(DateTime date, string reason) { RequireAdmin(); if (!SaudiValidation.IsOfficialWorkingDay(date)) throw new InvalidOperationException("الجمعة والسبت مستبعدان أصلًا من المواعيد."); if (string.IsNullOrWhiteSpace(reason)) throw new InvalidOperationException("أدخل سبب الإغلاق أو اسم الإجازة."); var c = new ClosureDate { Id = Guid.NewGuid(), Date = date.Date, Reason = reason.Trim(), CreatedAt = DateTime.Now }; InTransaction(() => { Execute("INSERT INTO closures(id,date_ticks,payload) VALUES($id,$date,$payload);", ("$id", c.Id.ToString("N")), ("$date", c.Date.Ticks), ("$payload", Serialize(c))); AuditInternal("إضافة يوم إغلاق", "Closure", c.Id.ToString(), null, c.Date.ToString("yyyy-MM-dd") + " " + c.Reason); }, true); }
-        public void DeleteClosure(Guid id) { RequireAdmin(); ClosureDate c = QueryPayload<ClosureDate>("SELECT payload FROM closures WHERE id=$id;", ("$id", id.ToString("N"))).FirstOrDefault(); if (c == null) return; InTransaction(() => { Execute("DELETE FROM closures WHERE id=$id;", ("$id", id.ToString("N"))); AuditInternal("حذف يوم إغلاق", "Closure", id.ToString(), null, c.Date.ToString("yyyy-MM-dd") + " " + c.Reason); }, true); }
+        public void DeleteClosure(Guid id) { RequireAdmin(); ClosureDate? c = QueryPayload<ClosureDate>("SELECT payload FROM closures WHERE id=$id;", ("$id", id.ToString("N"))).FirstOrDefault(); if (c == null) return; InTransaction(() => { Execute("DELETE FROM closures WHERE id=$id;", ("$id", id.ToString("N"))); AuditInternal("حذف يوم إغلاق", "Closure", id.ToString(), null, c.Date.ToString("yyyy-MM-dd") + " " + c.Reason); }, true); }
 
         public void Audit(string action, string entityType, string entityId, long? fileNumber, string details) { AuditInternal(action, entityType, entityId, fileNumber, details); }
         public void AuditSecurityEvent(string userName, string action, string details, DateTime occurredAt) { InsertAudit(new AuditEntry { Id = Guid.NewGuid(), OccurredAt = occurredAt, Action = action, EntityType = "Security", EntityId = userName ?? "", FileNumber = null, Details = details ?? "", MachineName = Environment.MachineName, UserName = string.IsNullOrWhiteSpace(userName) ? "غير معروف" : userName }); Checkpoint(); }
@@ -540,25 +584,27 @@ VALUES($id,$file,$national,$name,$mobile,$city,$birth,$created,$last,$archived,$
 
         public void CreateSnapshot(string destinationPath)
         {
+            RequireAdmin();
             if (string.IsNullOrWhiteSpace(destinationPath)) throw new ArgumentException("مسار النسخة غير صالح.", nameof(destinationPath)); Checkpoint();
             if (File.Exists(destinationPath)) File.Delete(destinationPath);
-            using (var target = new SqliteConnection(ConnectionString(destinationPath, SqliteOpenMode.ReadWriteCreate))) { target.Open(); db.BackupDatabase(target); }
+            using (var target = new SqliteConnection(ConnectionString(destinationPath, SqliteOpenMode.ReadWriteCreate))) { target.Open(); (db ?? throw new ObjectDisposedException(nameof(AppDatabase))).BackupDatabase(target); }
             ValidateDatabaseFile(destinationPath);
         }
 
         public void ValidateDatabaseFile(string path)
         {
+            RequireAdmin();
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) throw new FileNotFoundException("ملف قاعدة البيانات غير موجود."); EnsureNativeInitialized();
-            using (var test = new SqliteConnection(ConnectionString(path, SqliteOpenMode.ReadOnly))) { test.Open(); using (var cmd = test.CreateCommand()) { cmd.CommandText = "PRAGMA integrity_check;"; string result = Convert.ToString(cmd.ExecuteScalar()); if (!string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("فشل فحص سلامة قاعدة SQLite: " + result); cmd.CommandText = "SELECT COUNT(*) FROM settings WHERE id=1;"; if (Convert.ToInt64(cmd.ExecuteScalar()) != 1) throw new InvalidDataException("قاعدة بيانات النسخة لا تحتوي إعدادات النظام."); } }
+            using (var test = new SqliteConnection(ConnectionString(path, SqliteOpenMode.ReadOnly))) { test.Open(); using (var cmd = test.CreateCommand()) { cmd.CommandText = "PRAGMA integrity_check;"; string result = Convert.ToString(cmd.ExecuteScalar()) ?? string.Empty; if (!string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("فشل فحص سلامة قاعدة SQLite: " + result); cmd.CommandText = "SELECT COUNT(*) FROM settings WHERE id=1;"; if (Convert.ToInt64(cmd.ExecuteScalar()) != 1) throw new InvalidDataException("قاعدة بيانات النسخة لا تحتوي إعدادات النظام."); } }
         }
 
         private SqliteCommand Command(string sql, params (string Name, object Value)[] parameters)
         {
-            if (db == null) throw new ObjectDisposedException(nameof(AppDatabase)); var cmd = db.CreateCommand(); cmd.CommandText = sql; cmd.Transaction = transaction; foreach (var p in parameters) cmd.Parameters.AddWithValue(p.Name, p.Value ?? DBNull.Value); return cmd;
+            SqliteConnection connection = db ?? throw new ObjectDisposedException(nameof(AppDatabase)); var cmd = connection.CreateCommand(); cmd.CommandText = sql; cmd.Transaction = transaction; foreach (var p in parameters) cmd.Parameters.AddWithValue(p.Name, p.Value ?? DBNull.Value); return cmd;
         }
         private int Execute(string sql, params (string Name, object Value)[] parameters) { using (SqliteCommand cmd = Command(sql, parameters)) return cmd.ExecuteNonQuery(); }
-        private long ScalarLong(string sql, params (string Name, object Value)[] parameters) { using (SqliteCommand cmd = Command(sql, parameters)) { object value = cmd.ExecuteScalar(); return value == null || value == DBNull.Value ? 0 : Convert.ToInt64(value); } }
-        private string ScalarString(string sql, params (string Name, object Value)[] parameters) { using (SqliteCommand cmd = Command(sql, parameters)) return Convert.ToString(cmd.ExecuteScalar()); }
+        private long ScalarLong(string sql, params (string Name, object Value)[] parameters) { using (SqliteCommand cmd = Command(sql, parameters)) { object? value = cmd.ExecuteScalar(); return value == null || value == DBNull.Value ? 0 : Convert.ToInt64(value); } }
+        private string ScalarString(string sql, params (string Name, object Value)[] parameters) { using (SqliteCommand cmd = Command(sql, parameters)) return Convert.ToString(cmd.ExecuteScalar()) ?? string.Empty; }
         private List<T> QueryPayload<T>(string sql, params (string Name, object Value)[] parameters)
         {
             var result = new List<T>(); using (SqliteCommand cmd = Command(sql, parameters)) using (SqliteDataReader reader = cmd.ExecuteReader()) while (reader.Read()) { T item = JsonSerializer.Deserialize<T>(reader.GetString(0), JsonOptions); if (item == null) throw new InvalidDataException("تعذر قراءة سجل من قاعدة SQLite."); result.Add(item); } return result;
@@ -568,7 +614,7 @@ VALUES($id,$file,$national,$name,$mobile,$city,$birth,$created,$last,$archived,$
 
         private T InTransaction<T>(Func<T> action, bool checkpoint = false)
         {
-            if (transaction != null) return action(); using (SqliteTransaction tx = db.BeginTransaction()) { transaction = tx; try { T result = action(); tx.Commit(); return result; } catch { tx.Rollback(); throw; } finally { transaction = null; if (checkpoint) Checkpoint(); } }
+            if (transaction != null) return action(); SqliteConnection connection = db ?? throw new ObjectDisposedException(nameof(AppDatabase)); using (SqliteTransaction tx = connection.BeginTransaction()) { transaction = tx; try { T result = action(); tx.Commit(); return result; } catch { tx.Rollback(); throw; } finally { transaction = null; if (checkpoint) Checkpoint(); } }
         }
         private void InTransaction(Action action, bool checkpoint = false) { InTransaction(() => { action(); return true; }, checkpoint); }
         private string MaterializeDatabasePassword() { if (databasePasswordBytes == null) throw new ObjectDisposedException(nameof(AppDatabase)); return Encoding.UTF8.GetString(databasePasswordBytes); }

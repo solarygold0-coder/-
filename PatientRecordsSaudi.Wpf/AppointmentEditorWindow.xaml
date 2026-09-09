@@ -24,7 +24,7 @@
         <TextBlock Text="عنوان الموعد" VerticalAlignment="Center" /><TextBox Grid.Column="1" x:Name="TitleBox" MaxLength="150" Margin="5" />
         <TextBlock Grid.Row="1" Text="نوع الزيارة" VerticalAlignment="Center" /><ComboBox Grid.Row="1" Grid.Column="1" x:Name="VisitTypeBox" Margin="5" />
         <TextBlock Grid.Row="2" Text="التاريخ والوقت الميلادي" VerticalAlignment="Center" /><controls:DateTimeScrollPicker Grid.Row="2" Grid.Column="1" x:Name="StartsAtPicker" ShowTime="True" Margin="5" />
-        <TextBlock Grid.Row="3" Text="المدة بالدقائق" VerticalAlignment="Center" /><ComboBox Grid.Row="3" Grid.Column="1" x:Name="DurationBox" Margin="5"><ComboBoxItem Content="15" /><ComboBoxItem Content="30" IsSelected="True" /><ComboBoxItem Content="45" /><ComboBoxItem Content="60" /><ComboBoxItem Content="90" /><ComboBoxItem Content="120" /></ComboBox>
+        <TextBlock Grid.Row="3" Text="المدة بالدقائق" VerticalAlignment="Center" /><ComboBox Grid.Row="3" Grid.Column="1" x:Name="DurationBox" Margin="5"><ComboBoxItem Content="15" /><ComboBoxItem Content="20" /><ComboBoxItem Content="30" IsSelected="True" /><ComboBoxItem Content="45" /><ComboBoxItem Content="60" /><ComboBoxItem Content="90" /><ComboBoxItem Content="120" /></ComboBox>
         <TextBlock Grid.Row="4" Text="الحالة" VerticalAlignment="Center" /><ComboBox Grid.Row="4" Grid.Column="1" x:Name="StatusBox" Margin="5" />
         <TextBlock Grid.Row="5" Text="ملاحظات" VerticalAlignment="Top" Margin="0,12,0,0" /><TextBox Grid.Row="5" Grid.Column="1" x:Name="NotesBox" Height="90" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" MaxLength="1000" Margin="5" />
       </Grid></Border>

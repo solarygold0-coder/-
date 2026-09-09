@@ -36,14 +36,15 @@ public partial class DateTimeScrollPicker : UserControl
         }
         set
         {
+            int remainder = value.Minute % 5;
+            value = value.AddMinutes(remainder < 3 ? -remainder : 5 - remainder);
+            value = value.AddTicks(-(value.Ticks % TimeSpan.TicksPerMinute));
             if (value.Year < minimumYear || value.Year > maximumYear) ConfigureYearRange(Math.Min(value.Year, minimumYear), Math.Max(value.Year, maximumYear));
             DayBox.SelectedItem = value.Day.ToString("00", CultureInfo.InvariantCulture);
             MonthBox.SelectedValue = value.Month;
             YearBox.SelectedItem = value.Year;
             HourBox.SelectedItem = value.Hour.ToString("00", CultureInfo.InvariantCulture);
-            int minute = (int)Math.Round(value.Minute / 5d) * 5;
-            if (minute == 60) minute = 55;
-            MinuteBox.SelectedItem = minute.ToString("00", CultureInfo.InvariantCulture);
+            MinuteBox.SelectedItem = value.Minute.ToString("00", CultureInfo.InvariantCulture);
         }
     }
 

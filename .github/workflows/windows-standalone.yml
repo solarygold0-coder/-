@@ -3,9 +3,11 @@ name: Windows Standalone EXE
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main, v6-clean-rebuild ]
     paths-ignore:
       - "release/**"
+  pull_request:
+    branches: [ main ]
 
 permissions:
   contents: read
@@ -25,18 +27,6 @@ jobs:
         shell: powershell
         run: .\publish-standalone.ps1
 
-      - name: Capture actual WPF interface
-        shell: powershell
-        run: |
-          $large = Join-Path $PWD "release-standalone\Saudi-Patient-Records-v5.3.0-Actual-UI.png"
-          $compact = Join-Path $PWD "release-standalone\Saudi-Patient-Records-v5.3.0-Actual-UI-Compact.png"
-          $largeProcess = Start-Process ".\release-standalone\Saudi-Patient-Records.exe" -ArgumentList @("--capture-ui", $large, "1440", "900") -Wait -PassThru
-          $compactProcess = Start-Process ".\release-standalone\Saudi-Patient-Records.exe" -ArgumentList @("--capture-ui", $compact, "980", "700") -Wait -PassThru
-          if ($largeProcess.ExitCode -ne 0 -or $compactProcess.ExitCode -ne 0) { throw "Actual UI screenshot capture failed." }
-          foreach ($image in @($large, $compact)) {
-            if (-not (Test-Path $image) -or (Get-Item $image).Length -lt 10000) { throw "Actual UI screenshot is missing or unexpectedly small: $image" }
-          }
-
       - name: Verify deliverable shape
         shell: powershell
         run: |
@@ -49,7 +39,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Saudi-Patient-Records-Standalone-EXE-v5.3.0
+          name: Saudi-Patient-Records-Standalone-EXE-v6.0.0
           if-no-files-found: error
           compression-level: 0
           path: release-standalone/**

@@ -201,7 +201,7 @@ public partial class MainWindow : FluentWindow
 
     private void SetSettingsEnabled(bool enabled)
     {
-        foreach (Control control in new Control[] { ClinicNameBox, ClinicPhoneBox, ClinicAddressBox, WorkStartBox, WorkEndBox, DefaultDurationBox, BackupIntervalBox, VisitTypesText, AppointmentStatusesText, TaskPrioritiesText, GenderOptionsText, BloodTypesText, RequireLoginCheck })
+        foreach (Control control in new Control[] { ClinicNameBox, ClinicPhoneBox, ClinicAddressBox, WorkStartBox, WorkEndBox, DefaultDurationBox, BackupIntervalBox, VisitTypesText, AppointmentStatusesText, TaskPrioritiesText, GenderOptionsText, BloodTypesText, RequireLoginCheck, ChooseLogoButton, RemoveLogoButton, InternalBackupFolderButton, ChooseBackupFolderButton, ManageUsersButton, CreateBackupButton, RestoreBackupButton, ClosuresButton, RecycleBinButton, SaveSettingsButton })
             control.IsEnabled = enabled;
     }
 
@@ -213,22 +213,6 @@ public partial class MainWindow : FluentWindow
     }
 
     private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e) => ApplyResponsiveLayout();
-
-    private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.F5)
-        {
-            LoadAll();
-            e.Handled = true;
-            return;
-        }
-
-        ModifierKeys required = ModifierKeys.Control | ModifierKeys.Shift;
-        if ((Keyboard.Modifiers & required) != required) return;
-        if (e.Key == Key.P) { NewPatient_Click(this, new RoutedEventArgs()); e.Handled = true; }
-        else if (e.Key == Key.A) { NewAppointment_Click(this, new RoutedEventArgs()); e.Handled = true; }
-        else if (e.Key == Key.T) { NewTask_Click(this, new RoutedEventArgs()); e.Handled = true; }
-    }
 
     private void ApplyResponsiveLayout()
     {
@@ -380,14 +364,7 @@ public partial class MainWindow : FluentWindow
         Appointment? appointment = AppointmentsGrid.SelectedItem as Appointment;
         if (appointment is null) { ShowError("اختر موعدًا أولًا."); return; }
         AppSettings settings = database.GetSettings();
-        var document = new FlowDocument
-        {
-            FlowDirection = FlowDirection.RightToLeft,
-            FontFamily = new FontFamily("Segoe UI"),
-            FontSize = 14,
-            PagePadding = new Thickness(55),
-            ColumnWidth = double.PositiveInfinity
-        };
+        var document = new FlowDocument { FlowDirection = FlowDirection.RightToLeft, FontFamily = new FontFamily("Segoe UI"), FontSize = 15, PagePadding = new Thickness(55) };
         byte[]? logo = database.GetClinicLogo();
         if (logo is { Length: > 0 })
         {
@@ -400,40 +377,17 @@ public partial class MainWindow : FluentWindow
             imageSource.Freeze();
             document.Blocks.Add(new BlockUIContainer(new System.Windows.Controls.Image { Source = imageSource, Width = 96, Height = 96, Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Center }));
         }
-        document.Blocks.Add(new Paragraph(new Run(settings.ClinicName)) { FontSize = 24, FontWeight = FontWeights.Bold, TextAlignment = TextAlignment.Center, Margin = new Thickness(0, 8, 0, 4) });
-        document.Blocks.Add(new Paragraph(new Run("إشعار موعد للمراجع")) { FontSize = 19, FontWeight = FontWeights.SemiBold, TextAlignment = TextAlignment.Center, Foreground = new SolidColorBrush(Color.FromRgb(8, 127, 91)), Margin = new Thickness(0, 0, 0, 22) });
-
-        var details = new Table { CellSpacing = 0, BorderBrush = new SolidColorBrush(Color.FromRgb(203, 213, 225)), BorderThickness = new Thickness(1) };
-        details.Columns.Add(new TableColumn { Width = new GridLength(155) });
-        details.Columns.Add(new TableColumn { Width = new GridLength(1, GridUnitType.Star) });
-        var rows = new TableRowGroup();
-        details.RowGroups.Add(rows);
-        AddPrintRow(rows, "اسم المراجع", appointment.PatientName);
-        AddPrintRow(rows, "رقم الملف", appointment.FileNumber.ToString(CultureInfo.InvariantCulture));
-        AddPrintRow(rows, "الموعد", appointment.Title);
-        AddPrintRow(rows, "التاريخ الميلادي", appointment.DateText);
-        AddPrintRow(rows, "الوقت", appointment.TimeText);
-        AddPrintRow(rows, "نوع الزيارة", appointment.VisitType);
-        AddPrintRow(rows, "الحالة", appointment.Status);
-        document.Blocks.Add(details);
-
-        var contact = new List<string>();
-        if (!string.IsNullOrWhiteSpace(settings.ClinicPhone)) contact.Add("الهاتف: " + settings.ClinicPhone);
-        if (!string.IsNullOrWhiteSpace(settings.ClinicAddress)) contact.Add("العنوان: " + settings.ClinicAddress);
-        if (contact.Count > 0) document.Blocks.Add(new Paragraph(new Run(string.Join("  •  ", contact))) { TextAlignment = TextAlignment.Center, Foreground = Brushes.DimGray, Margin = new Thickness(0, 22, 0, 8) });
-        document.Blocks.Add(new Paragraph(new Run("طُبع في " + DateTime.Now.ToString("yyyy/MM/dd  hh:mm tt", CultureInfo.InvariantCulture))) { FontSize = 11, TextAlignment = TextAlignment.Center, Foreground = Brushes.Gray });
-        document.Blocks.Add(new Paragraph(new Run("هذا الإشعار مخصص للمراجع. يُرجى المحافظة على خصوصية البيانات.")) { FontSize = 10, TextAlignment = TextAlignment.Center, Foreground = Brushes.Gray, Margin = new Thickness(0, 16, 0, 0) });
+        document.Blocks.Add(new Paragraph(new Run(settings.ClinicName)) { FontSize = 24, FontWeight = FontWeights.Bold, TextAlignment = TextAlignment.Center });
+        document.Blocks.Add(new Paragraph(new Run("إشعار موعد")) { FontSize = 20, FontWeight = FontWeights.SemiBold, TextAlignment = TextAlignment.Center });
+        document.Blocks.Add(new Paragraph(new Run("اسم المراجع: " + appointment.PatientName)));
+        document.Blocks.Add(new Paragraph(new Run("رقم الملف: " + appointment.FileNumber)));
+        document.Blocks.Add(new Paragraph(new Run("الموعد: " + appointment.Title)));
+        document.Blocks.Add(new Paragraph(new Run("التاريخ الميلادي: " + appointment.DateText)));
+        document.Blocks.Add(new Paragraph(new Run("الوقت: " + appointment.TimeText)));
+        document.Blocks.Add(new Paragraph(new Run("نوع الزيارة: " + appointment.VisitType)));
+        if (!string.IsNullOrWhiteSpace(settings.ClinicPhone)) document.Blocks.Add(new Paragraph(new Run("هاتف المنشأة: " + settings.ClinicPhone)));
         var print = new System.Windows.Controls.PrintDialog();
         if (print.ShowDialog() == true) print.PrintDocument(((IDocumentPaginatorSource)document).DocumentPaginator, "موعد " + appointment.FileNumber);
-    }
-
-    private static void AddPrintRow(TableRowGroup rows, string label, string value)
-    {
-        var line = new SolidColorBrush(Color.FromRgb(226, 232, 240));
-        var row = new TableRow();
-        row.Cells.Add(new TableCell(new Paragraph(new Run(label)) { FontWeight = FontWeights.SemiBold, Margin = new Thickness(0) }) { Padding = new Thickness(10), Background = new SolidColorBrush(Color.FromRgb(241, 245, 249)), BorderBrush = line, BorderThickness = new Thickness(0, 0, 0, 1) });
-        row.Cells.Add(new TableCell(new Paragraph(new Run(value ?? string.Empty)) { Margin = new Thickness(0) }) { Padding = new Thickness(10), BorderBrush = line, BorderThickness = new Thickness(0, 0, 0, 1) });
-        rows.Rows.Add(row);
     }
 
     private void NewTask_Click(object sender, RoutedEventArgs e) => ShowTaskEditor(null, null);
@@ -569,7 +523,7 @@ public partial class MainWindow : FluentWindow
 
     private void CreateBackup_Click(object sender, RoutedEventArgs e)
     {
-        if (!GuardWrite()) return;
+        if (!session.IsAdmin) { ShowError("إنشاء النسخة الاحتياطية متاح للمدير فقط."); return; }
         var dialog = new OpenFolderDialog { Title = "اختر مجلد حفظ النسخة الاحتياطية", Multiselect = false };
         if (dialog.ShowDialog(this) != true) return;
         try
@@ -584,7 +538,7 @@ public partial class MainWindow : FluentWindow
 
     private void RestoreBackup_Click(object sender, RoutedEventArgs e)
     {
-        if (!GuardWrite()) return;
+        if (!session.IsAdmin) { ShowError("استعادة النسخة الاحتياطية متاحة للمدير فقط."); return; }
         var dialog = new OpenFileDialog { Filter = "نسخة سجلات المراجعين (*.zip)|*.zip", Title = "اختر النسخة الاحتياطية" };
         if (dialog.ShowDialog(this) != true || !Confirm("ستستبدل النسخة الحالية بعد إنشاء نسخة أمان داخلية. هل تريد المتابعة؟")) return;
         try
@@ -658,16 +612,19 @@ public partial class MainWindow : FluentWindow
         try
         {
             DateTime now = DateTime.Now;
-            List<Appointment> appointments = database.GetUnnotifiedAppointments(now.AddMinutes(-1), now.AddMinutes(15), 5);
-            List<PatientTask> tasks = database.GetUnnotifiedTasks(now.AddMinutes(-1), now.AddMinutes(15), 5);
+            List<Appointment> appointments = database.GetUnnotifiedAppointments(now, now.AddDays(2), 50);
+            List<PatientTask> tasks = database.GetUnnotifiedTasks(now.AddDays(-7), now.AddMinutes(5), 50);
             if (appointments.Count == 0 && tasks.Count == 0 || activeReminder is not null) return;
-            foreach (Appointment item in appointments) database.MarkAppointmentNotified(item.Id);
-            foreach (PatientTask item in tasks) database.MarkTaskNotified(item.Id);
             activeReminder = new ReminderWindow(appointments, tasks, patientId => OpenPatient(database.GetPatient(patientId))) { Owner = this };
             activeReminder.Closed += (_, _) => activeReminder = null;
             activeReminder.Show();
+            foreach (Appointment item in appointments) database.MarkAppointmentNotified(item.Id);
+            foreach (PatientTask item in tasks) database.MarkTaskNotified(item.Id);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            try { database.Audit("خطأ في نافذة التنبيهات", "System", "reminders", null, ex.Message); database.Checkpoint(); } catch { }
+        }
     }
 
     private static bool Confirm(string text) => MessageBox.Show(text, "تأكيد", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No, MessageBoxOptions.RtlReading) == MessageBoxResult.Yes;

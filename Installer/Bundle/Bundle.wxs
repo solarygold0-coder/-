@@ -3,7 +3,7 @@
      xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
   <Bundle Name="نظام إدارة سجلات المراجعين"
           Manufacturer="Mohammed Mousa Asiri"
-          Version="5.3.0"
+          Version="$(var.ProductVersion)"
           UpgradeCode="{DD766240-72F2-47B3-8DEB-6A9E1D31A45D}"
           Compressed="yes">
     <BootstrapperApplication>

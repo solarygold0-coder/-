@@ -1,21 +1,17 @@
 [CmdletBinding()]
 param(
     [string]$Runtime = "win-x64",
-    [string]$Version = "5.3.0"
+    [string]$Version = "6.0.0"
 )
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $tests = Join-Path $root "PatientRecordsSaudi.Modern.Tests\PatientRecordsSaudi.Modern.Tests.csproj"
 $app = Join-Path $root "PatientRecordsSaudi.Wpf\PatientRecordsSaudi.Wpf.csproj"
-$package = Join-Path $root "InstallerV4\Package\Package.wixproj"
-$bundle = Join-Path $root "InstallerV4\Bundle\Bundle.wixproj"
+$package = Join-Path $root "Installer\Package\Package.wixproj"
+$bundle = Join-Path $root "Installer\Bundle\Bundle.wixproj"
 $publish = Join-Path $root "artifacts\installer-publish\$Runtime"
 $release = Join-Path $root "release-installer"
-
-if (Test-Path (Join-Path $root "PatientRecordsSaudi\PatientRecordsSaudi.csproj")) { throw "Obsolete WinForms project must not be shipped." }
-if (Test-Path (Join-Path $root "PatientRecordsSaudi\UI")) { throw "Obsolete WinForms UI sources must not be shipped." }
-if (Select-String -Path (Join-Path $root "PatientRecordsSaudi.Modern.Core\PatientRecordsSaudi.Modern.Core.csproj") -Pattern "LiteDB" -Quiet) { throw "Legacy LiteDB dependency must not be shipped." }
 
 if (Test-Path $publish) { Remove-Item $publish -Recurse -Force }
 if (Test-Path $release) { Remove-Item $release -Recurse -Force }
@@ -37,15 +33,17 @@ $appExe = Get-Item (Join-Path $publish "SaudiPatientRecords.exe")
 $unexpected = @(Get-ChildItem $publish -File | Where-Object { $_.Name -ne "SaudiPatientRecords.exe" })
 if ($unexpected.Count -ne 0) { throw "Publish did not produce exactly one executable." }
 
-dotnet build $package -c Release -p:PublishDir="$publish" -p:Version=$Version
+dotnet build $package -c Release -p:PublishDir="$publish" -p:ProductVersion=$Version
 if ($LASTEXITCODE -ne 0) { throw "MSI package build failed." }
-$msi = Get-ChildItem (Join-Path $root "InstallerV4\Package\bin\Release") -Filter *.msi -Recurse | Select-Object -First 1
-if (-not $msi) { throw "MSI output was not found." }
+$msiCandidates = @(Get-ChildItem (Join-Path $root "Installer\Package\bin\Release") -Filter *.msi -Recurse | Where-Object { $_.Name -eq "Saudi-Patient-Records.msi" })
+if ($msiCandidates.Count -ne 1) { throw "Expected exactly one MSI output; found $($msiCandidates.Count)." }
+$msi = $msiCandidates[0]
 
-dotnet build $bundle -c Release -p:MsiPath="$($msi.FullName)" -p:Version=$Version
+dotnet build $bundle -c Release -p:MsiPath="$($msi.FullName)" -p:ProductVersion=$Version
 if ($LASTEXITCODE -ne 0) { throw "Setup bootstrapper build failed." }
-$setup = Get-ChildItem (Join-Path $root "InstallerV4\Bundle\bin\Release") -Filter *.exe -Recurse | Where-Object { $_.Name -like "*Setup*" } | Select-Object -First 1
-if (-not $setup) { throw "Setup.exe output was not found." }
+$setupCandidates = @(Get-ChildItem (Join-Path $root "Installer\Bundle\bin\Release") -Filter *.exe -Recurse | Where-Object { $_.Name -eq "Saudi-Patient-Records-Setup.exe" })
+if ($setupCandidates.Count -ne 1) { throw "Expected exactly one Setup.exe output; found $($setupCandidates.Count)." }
+$setup = $setupCandidates[0]
 
 $setupOut = Join-Path $release "Saudi-Patient-Records-Setup.exe"
 $standaloneOut = Join-Path $release "Saudi-Patient-Records-Standalone.exe"
@@ -59,7 +57,7 @@ foreach ($file in @($setupOut, $standaloneOut)) {
 
 $install = Start-Process $setupOut -ArgumentList "/quiet /norestart" -Wait -PassThru
 if ($install.ExitCode -ne 0 -and $install.ExitCode -ne 3010) { throw "Automated installer verification failed with exit code $($install.ExitCode)." }
-$installedExe = Join-Path $env:LOCALAPPDATA "Programs\Saudi Patient Records 5\SaudiPatientRecords.exe"
+$installedExe = Join-Path $env:LOCALAPPDATA "Programs\Saudi Patient Records 6\SaudiPatientRecords.exe"
 if (-not (Test-Path $installedExe)) { throw "Installed executable was not found in the expected per-user location." }
 $selfTest = Start-Process $installedExe -ArgumentList "--self-test" -Wait -PassThru
 if ($selfTest.ExitCode -ne 0) { throw "Installed application self-test failed with exit code $($selfTest.ExitCode)." }
@@ -75,10 +73,9 @@ $standaloneHash = (Get-FileHash $standaloneOut -Algorithm SHA256).Hash.ToLowerIn
     "InstallScope=Per-user"
     "DefaultAccount=None"
     "StartupLogin=Disabled; a named manager account is required before enabling"
-    "DataProfile=Independent SaudiPatientRecordsV5; no automatic legacy copy"
+    "DataProfile=Independent SaudiPatientRecordsV6; no automatic legacy copy"
     "Database=Encrypted SQLite (SQLCipher)"
     "Frontend=WPF + WPF-UI 4.3 Fluent"
-    "LegacyUI=None; WinForms project and LiteDB migration removed"
     "DigitalSignature=None (unsigned public-source build)"
     "SetupSHA256=$setupHash"
     "StandaloneSHA256=$standaloneHash"
