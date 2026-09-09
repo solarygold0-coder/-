@@ -75,7 +75,7 @@ namespace PatientRecordsSaudi.Services
                 }
             }
         }
-        private static string ManifestValue(string text, string key) { string line = text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault(x => x.StartsWith(key + "=", StringComparison.Ordinal)); if (line == null) throw new InvalidDataException("بيانات سلامة النسخة ناقصة."); return line.Substring(key.Length + 1).Trim(); }
+        private static string ManifestValue(string text, string key) { string? line = text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault(x => x.StartsWith(key + "=", StringComparison.Ordinal)); if (line == null) throw new InvalidDataException("بيانات سلامة النسخة ناقصة."); return line.Substring(key.Length + 1).Trim(); }
         private static string Hash(string path) { using (var sha = SHA256.Create()) using (var input = File.OpenRead(path)) return BitConverter.ToString(sha.ComputeHash(input)).Replace("-", "").ToLowerInvariant(); }
         private static void TryDelete(string path) { try { if (File.Exists(path)) File.Delete(path); } catch { } }
     }

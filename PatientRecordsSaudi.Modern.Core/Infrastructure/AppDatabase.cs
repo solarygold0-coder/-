@@ -446,12 +446,12 @@ VALUES($id,$file,$national,$name,$mobile,$city,$birth,$created,$last,$archived,$
 
         public static void TryRestrictFileToCurrentUser(string path)
         {
-            try { SecurityIdentifier sid = WindowsIdentity.GetCurrent().User; if (sid == null) return; var rules = new FileSecurity(); rules.SetOwner(sid); rules.SetAccessRuleProtection(true, false); rules.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.FullControl, AccessControlType.Allow)); new FileInfo(path).SetAccessControl(rules); } catch { }
+            try { SecurityIdentifier? sid = WindowsIdentity.GetCurrent().User; if (sid == null) return; var rules = new FileSecurity(); rules.SetOwner(sid); rules.SetAccessRuleProtection(true, false); rules.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.FullControl, AccessControlType.Allow)); new FileInfo(path).SetAccessControl(rules); } catch { }
         }
 
         private static void EnsurePrivateDirectory(string path)
         {
-            Directory.CreateDirectory(path); try { SecurityIdentifier sid = WindowsIdentity.GetCurrent().User; if (sid == null) return; var rules = new DirectorySecurity(); rules.SetOwner(sid); rules.SetAccessRuleProtection(true, false); rules.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.FullControl, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow)); new DirectoryInfo(path).SetAccessControl(rules); } catch { }
+            Directory.CreateDirectory(path); try { SecurityIdentifier? sid = WindowsIdentity.GetCurrent().User; if (sid == null) return; var rules = new DirectorySecurity(); rules.SetOwner(sid); rules.SetAccessRuleProtection(true, false); rules.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.FullControl, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow)); new DirectoryInfo(path).SetAccessControl(rules); } catch { }
         }
 
         private static void TryMarkTemporary(string path) { try { File.SetAttributes(path, File.GetAttributes(path) | FileAttributes.Temporary | FileAttributes.NotContentIndexed); } catch { } }
@@ -553,8 +553,8 @@ VALUES($id,$file,$national,$name,$mobile,$city,$birth,$created,$last,$archived,$
         public PatientTask? GetNextUnnotifiedTask(DateTime from, DateTime to) { return GetUnnotifiedTasks(from, to, 1).FirstOrDefault(); }
         public List<Appointment> GetUnnotifiedAppointments(DateTime from, DateTime to, int maximum) { return QueryPayload<Appointment>("SELECT payload FROM appointments WHERE is_deleted=0 AND reminder_ticks IS NULL AND starts_ticks >= $from AND starts_ticks <= $to AND status <> 'ملغي' ORDER BY starts_ticks LIMIT $limit;", ("$from", from.Ticks), ("$to", to.Ticks), ("$limit", Math.Max(1, maximum))); }
         public List<PatientTask> GetUnnotifiedTasks(DateTime from, DateTime to, int maximum) { return QueryPayload<PatientTask>("SELECT payload FROM tasks WHERE is_deleted=0 AND is_completed=0 AND reminder_ticks IS NULL AND due_ticks >= $from AND due_ticks <= $to ORDER BY due_ticks LIMIT $limit;", ("$from", from.Ticks), ("$to", to.Ticks), ("$limit", Math.Max(1, maximum))); }
-        public void MarkAppointmentNotified(Guid id) { Appointment a = GetAppointment(id); if (a != null) { a.ReminderNotifiedAt = DateTime.Now; UpdateAppointmentRow(a); Checkpoint(); } }
-        public void MarkTaskNotified(Guid id) { PatientTask t = GetTask(id); if (t != null) { t.ReminderNotifiedAt = DateTime.Now; UpdateTaskRow(t); Checkpoint(); } }
+        public void MarkAppointmentNotified(Guid id) { Appointment? a = GetAppointment(id); if (a != null) { a.ReminderNotifiedAt = DateTime.Now; UpdateAppointmentRow(a); Checkpoint(); } }
+        public void MarkTaskNotified(Guid id) { PatientTask? t = GetTask(id); if (t != null) { t.ReminderNotifiedAt = DateTime.Now; UpdateTaskRow(t); Checkpoint(); } }
 
         private void RecalculateLastVisit(Guid patientId)
         {
@@ -607,7 +607,7 @@ VALUES($id,$file,$national,$name,$mobile,$city,$birth,$created,$last,$archived,$
         private string ScalarString(string sql, params (string Name, object Value)[] parameters) { using (SqliteCommand cmd = Command(sql, parameters)) return Convert.ToString(cmd.ExecuteScalar()) ?? string.Empty; }
         private List<T> QueryPayload<T>(string sql, params (string Name, object Value)[] parameters)
         {
-            var result = new List<T>(); using (SqliteCommand cmd = Command(sql, parameters)) using (SqliteDataReader reader = cmd.ExecuteReader()) while (reader.Read()) { T item = JsonSerializer.Deserialize<T>(reader.GetString(0), JsonOptions); if (item == null) throw new InvalidDataException("تعذر قراءة سجل من قاعدة SQLite."); result.Add(item); } return result;
+            var result = new List<T>(); using (SqliteCommand cmd = Command(sql, parameters)) using (SqliteDataReader reader = cmd.ExecuteReader()) while (reader.Read()) { T? item = JsonSerializer.Deserialize<T>(reader.GetString(0), JsonOptions); if (item == null) throw new InvalidDataException("تعذر قراءة سجل من قاعدة SQLite."); result.Add(item); } return result;
         }
         private static string Serialize<T>(T value) { return JsonSerializer.Serialize(value, JsonOptions); }
         private static object DbTicks(DateTime? value) { return value.HasValue ? value.Value.Ticks : DBNull.Value; }
