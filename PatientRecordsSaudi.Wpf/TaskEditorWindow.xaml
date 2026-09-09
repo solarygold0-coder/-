@@ -1,0 +1,24 @@
+<ui:FluentWindow x:Class="PatientRecordsSaudi.Wpf.TaskEditorWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    xmlns:controls="clr-namespace:PatientRecordsSaudi.Wpf.Controls"
+    Title="مهمة أو تنبيه" Width="780" Height="650" MinWidth="700" MinHeight="590"
+    WindowStartupLocation="CenterOwner" FlowDirection="RightToLeft" FontFamily="Segoe UI" FontSize="14" Background="{StaticResource CanvasBrush}">
+  <Grid>
+    <Grid.RowDefinitions><RowDefinition Height="82" /><RowDefinition Height="*" /><RowDefinition Height="72" /></Grid.RowDefinitions>
+    <Border Background="{StaticResource PrimaryDarkBrush}" Padding="24,12"><StackPanel VerticalAlignment="Center"><TextBlock x:Name="HeaderText" Text="مهمة / تنبيه جديد" Foreground="White" FontSize="23" FontWeight="Bold" /><TextBlock Text="عند الضغط على المهمة من القائمة يُفتح ملف المراجع" Foreground="#B9D5CA" Margin="0,4,0,0" /></StackPanel></Border>
+    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"><Border Style="{StaticResource CardStyle}" Margin="24"><Grid>
+      <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+      <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+      <TextBlock Text="رقم ملف المراجع" VerticalAlignment="Center" /><StackPanel Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="FileNumberBox" Width="210" Margin="5" PreviewTextInput="DigitsOnly_PreviewTextInput" /><Button Style="{StaticResource SecondaryButtonStyle}" Click="ResolvePatient_Click" Content="جلب بيانات المراجع" /></StackPanel>
+      <TextBlock Grid.Row="1" Text="اسم المراجع" VerticalAlignment="Center" /><TextBox Grid.Row="1" Grid.Column="1" x:Name="PatientNameBox" IsReadOnly="True" Background="#EEF2F4" Margin="5" />
+      <TextBlock Grid.Row="2" Text="اسم المهمة / التنبيه" VerticalAlignment="Center" /><TextBox Grid.Row="2" Grid.Column="1" x:Name="TitleBox" MaxLength="150" Margin="5" />
+      <TextBlock Grid.Row="3" Text="الموعد الميلادي" VerticalAlignment="Center" /><controls:DateTimeScrollPicker Grid.Row="3" Grid.Column="1" x:Name="DuePicker" ShowTime="True" Margin="5" />
+      <TextBlock Grid.Row="4" Text="الأولوية" VerticalAlignment="Center" /><ComboBox Grid.Row="4" Grid.Column="1" x:Name="PriorityBox" Margin="5" />
+      <TextBlock Grid.Row="5" Text="الحالة" VerticalAlignment="Center" /><ComboBox Grid.Row="5" Grid.Column="1" x:Name="CompletionBox" Margin="5"><ComboBoxItem Content="مفتوحة" IsSelected="True" /><ComboBoxItem Content="مكتملة" /></ComboBox>
+      <TextBlock Grid.Row="6" Text="ملاحظات" VerticalAlignment="Top" Margin="0,12,0,0" /><TextBox Grid.Row="6" Grid.Column="1" x:Name="NotesBox" Height="95" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" MaxLength="1000" Margin="5" />
+    </Grid></Border></ScrollViewer>
+    <Border Grid.Row="2" Background="White" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="0,1,0,0" Padding="18,10"><StackPanel Orientation="Horizontal" HorizontalAlignment="Left"><Button Style="{StaticResource PrimaryButtonStyle}" Click="Save_Click" Content="حفظ المهمة" /><Button Style="{StaticResource SecondaryButtonStyle}" Click="Cancel_Click" Content="إلغاء" /></StackPanel></Border>
+  </Grid>
+</ui:FluentWindow>

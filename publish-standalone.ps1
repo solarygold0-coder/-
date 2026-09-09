@@ -1,13 +1,13 @@
 [CmdletBinding()]
 param(
     [string]$Runtime = "win-x64",
-    [string]$Version = "5.0.0"
+    [string]$Version = "5.1.0"
 )
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $tests = Join-Path $root "PatientRecordsSaudi.Modern.Tests\PatientRecordsSaudi.Modern.Tests.csproj"
-$app = Join-Path $root "PatientRecordsSaudi\PatientRecordsSaudi.csproj"
+$app = Join-Path $root "PatientRecordsSaudi.Wpf\PatientRecordsSaudi.Wpf.csproj"
 $intermediate = Join-Path $root "artifacts\publish\$Runtime"
 $release = Join-Path $root "release-standalone"
 $releaseExe = Join-Path $release "Saudi-Patient-Records.exe"
@@ -57,6 +57,7 @@ $size = (Get-Item $releaseExe).Length
     "Architecture=x64"
     "Packaging=Unpackaged Win32 single-file EXE"
     "Runtime=.NET 10 self-contained"
+    "Frontend=WPF + WPF-UI 4.3 Fluent"
     "DefaultAccount=None"
     "StartupLogin=Disabled; a named manager account is required before enabling"
     "DataProfile=Independent SaudiPatientRecordsV5; no automatic legacy copy"

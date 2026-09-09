@@ -8,6 +8,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PatientRecordsSaudi.Modern.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PatientRecordsSaudi.Modern.Tests", "..\PatientRecordsSaudi.Modern.Tests\PatientRecordsSaudi.Modern.Tests.csproj", "{D947026E-1356-4D35-8AA2-87EC9D2A9D9A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PatientRecordsSaudi.Wpf", "..\PatientRecordsSaudi.Wpf\PatientRecordsSaudi.Wpf.csproj", "{B6724656-3C43-4E68-992D-D8FAEA26D68A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -26,5 +28,9 @@ Global
 		{D947026E-1356-4D35-8AA2-87EC9D2A9D9A}.Debug|x64.Build.0 = Debug|Any CPU
 		{D947026E-1356-4D35-8AA2-87EC9D2A9D9A}.Release|x64.ActiveCfg = Release|Any CPU
 		{D947026E-1356-4D35-8AA2-87EC9D2A9D9A}.Release|x64.Build.0 = Release|Any CPU
+		{B6724656-3C43-4E68-992D-D8FAEA26D68A}.Debug|x64.ActiveCfg = Debug|x64
+		{B6724656-3C43-4E68-992D-D8FAEA26D68A}.Debug|x64.Build.0 = Debug|x64
+		{B6724656-3C43-4E68-992D-D8FAEA26D68A}.Release|x64.ActiveCfg = Release|x64
+		{B6724656-3C43-4E68-992D-D8FAEA26D68A}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 EndGlobal

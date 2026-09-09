@@ -1,0 +1,15 @@
+<ui:FluentWindow x:Class="PatientRecordsSaudi.Wpf.ClosureDatesWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    xmlns:controls="clr-namespace:PatientRecordsSaudi.Wpf.Controls"
+    Title="أيام الإغلاق والإجازات" Width="820" Height="620" MinWidth="720" MinHeight="540"
+    WindowStartupLocation="CenterOwner" FlowDirection="RightToLeft" FontFamily="Segoe UI" FontSize="14" Background="{StaticResource CanvasBrush}">
+  <Grid>
+    <Grid.RowDefinitions><RowDefinition Height="82" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="66" /></Grid.RowDefinitions>
+    <Border Background="{StaticResource PrimaryDarkBrush}" Padding="24,12"><StackPanel VerticalAlignment="Center"><TextBlock Text="أيام الإغلاق والإجازات" Foreground="White" FontSize="23" FontWeight="Bold" /><TextBlock Text="التاريخ ميلادي بالقوائم الدوّارة" Foreground="#B9D5CA" Margin="0,4,0,0" /></StackPanel></Border>
+    <Border Grid.Row="1" Style="{StaticResource CardStyle}" Margin="18,14"><WrapPanel><controls:DateTimeScrollPicker x:Name="DatePicker" ShowTime="False" Margin="4" /><StackPanel Margin="8,0"><TextBlock Text="السبب" Foreground="{StaticResource MutedBrush}" Margin="3,0,3,4" /><TextBox x:Name="ReasonBox" Width="240" MaxLength="120" /></StackPanel><Button Style="{StaticResource PrimaryButtonStyle}" VerticalAlignment="Bottom" Click="Add_Click" Content="إضافة يوم إغلاق" /></WrapPanel></Border>
+    <Border Grid.Row="2" Style="{StaticResource CardStyle}" Margin="18,0"><DataGrid x:Name="ClosuresGrid"><DataGrid.Columns><DataGridTextColumn Header="التاريخ الميلادي" Binding="{Binding Date, StringFormat=yyyy/MM/dd}" Width="200" /><DataGridTextColumn Header="سبب الإغلاق / الإجازة" Binding="{Binding Reason}" Width="*" /></DataGrid.Columns></DataGrid></Border>
+    <Border Grid.Row="3" Background="White" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="0,1,0,0" Padding="14"><StackPanel Orientation="Horizontal" HorizontalAlignment="Left"><Button Style="{StaticResource DangerButtonStyle}" Click="Delete_Click" Content="حذف المحدد" /><Button Style="{StaticResource SecondaryButtonStyle}" Click="Close_Click" Content="إغلاق" /></StackPanel></Border>
+  </Grid>
+</ui:FluentWindow>

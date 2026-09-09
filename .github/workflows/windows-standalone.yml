@@ -37,7 +37,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Saudi-Patient-Records-Standalone-EXE-v5.0.0
+          name: Saudi-Patient-Records-Standalone-EXE-v5.1.0
           if-no-files-found: error
           compression-level: 0
           path: release-standalone/**

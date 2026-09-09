@@ -1,0 +1,29 @@
+<UserControl x:Class="PatientRecordsSaudi.Wpf.Controls.DateTimeScrollPicker"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FlowDirection="RightToLeft">
+  <WrapPanel>
+    <StackPanel Margin="0,0,6,6">
+      <TextBlock Text="اليوم" Foreground="{StaticResource MutedBrush}" Margin="3,0,3,4" />
+      <ComboBox x:Name="DayBox" Width="76" />
+    </StackPanel>
+    <StackPanel Margin="0,0,6,6">
+      <TextBlock Text="الشهر الميلادي" Foreground="{StaticResource MutedBrush}" Margin="3,0,3,4" />
+      <ComboBox x:Name="MonthBox" Width="150" DisplayMemberPath="Label" SelectedValuePath="Number" />
+    </StackPanel>
+    <StackPanel Margin="0,0,6,6">
+      <TextBlock Text="السنة" Foreground="{StaticResource MutedBrush}" Margin="3,0,3,4" />
+      <ComboBox x:Name="YearBox" Width="92" />
+    </StackPanel>
+    <StackPanel x:Name="TimePanel" Orientation="Horizontal">
+      <StackPanel Margin="0,0,6,6">
+        <TextBlock Text="الساعة" Foreground="{StaticResource MutedBrush}" Margin="3,0,3,4" />
+        <ComboBox x:Name="HourBox" Width="76" />
+      </StackPanel>
+      <StackPanel Margin="0,0,6,6">
+        <TextBlock Text="الدقيقة" Foreground="{StaticResource MutedBrush}" Margin="3,0,3,4" />
+        <ComboBox x:Name="MinuteBox" Width="76" />
+      </StackPanel>
+    </StackPanel>
+  </WrapPanel>
+</UserControl>

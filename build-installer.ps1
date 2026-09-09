@@ -1,13 +1,13 @@
 [CmdletBinding()]
 param(
     [string]$Runtime = "win-x64",
-    [string]$Version = "5.0.0"
+    [string]$Version = "5.1.0"
 )
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $tests = Join-Path $root "PatientRecordsSaudi.Modern.Tests\PatientRecordsSaudi.Modern.Tests.csproj"
-$app = Join-Path $root "PatientRecordsSaudi\PatientRecordsSaudi.csproj"
+$app = Join-Path $root "PatientRecordsSaudi.Wpf\PatientRecordsSaudi.Wpf.csproj"
 $package = Join-Path $root "InstallerV4\Package\Package.wixproj"
 $bundle = Join-Path $root "InstallerV4\Bundle\Bundle.wixproj"
 $publish = Join-Path $root "artifacts\installer-publish\$Runtime"
@@ -73,6 +73,7 @@ $standaloneHash = (Get-FileHash $standaloneOut -Algorithm SHA256).Hash.ToLowerIn
     "StartupLogin=Disabled; a named manager account is required before enabling"
     "DataProfile=Independent SaudiPatientRecordsV5; no automatic legacy copy"
     "Database=Encrypted SQLite (SQLCipher)"
+    "Frontend=WPF + WPF-UI 4.3 Fluent"
     "DigitalSignature=None (unsigned public-source build)"
     "SetupSHA256=$setupHash"
     "StandaloneSHA256=$standaloneHash"

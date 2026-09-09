@@ -1,0 +1,17 @@
+<ui:FluentWindow x:Class="PatientRecordsSaudi.Wpf.UserEditorWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    Title="إضافة مستخدم" Width="500" Height="580" ResizeMode="NoResize" WindowStartupLocation="CenterOwner"
+    FlowDirection="RightToLeft" FontFamily="Segoe UI" FontSize="14" Background="{StaticResource CanvasBrush}">
+  <Border Margin="24" Style="{StaticResource CardStyle}" Padding="28"><StackPanel>
+    <TextBlock Text="إضافة مستخدم مسمّى" FontSize="22" FontWeight="Bold" Margin="0,0,0,18" />
+    <TextBlock Text="اسم المستخدم" FontWeight="SemiBold" Margin="3,4" /><TextBox x:Name="UsernameBox" MaxLength="40" Margin="0,0,0,10" />
+    <TextBlock Text="اسم الموظف" FontWeight="SemiBold" Margin="3,4" /><TextBox x:Name="DisplayNameBox" MaxLength="80" Margin="0,0,0,10" />
+    <TextBlock Text="الصلاحية" FontWeight="SemiBold" Margin="3,4" /><ComboBox x:Name="RoleBox" Margin="0,0,0,10"><ComboBoxItem Content="موظف" IsSelected="True" /><ComboBoxItem Content="قراءة فقط" /><ComboBoxItem Content="مدير" /></ComboBox>
+    <TextBlock Text="كلمة المرور" FontWeight="SemiBold" Margin="3,4" /><PasswordBox x:Name="PasswordBox" Height="40" Padding="10,7" Margin="0,0,0,10" />
+    <TextBlock Text="تأكيد كلمة المرور" FontWeight="SemiBold" Margin="3,4" /><PasswordBox x:Name="ConfirmBox" Height="40" Padding="10,7" Margin="0,0,0,8" />
+    <TextBlock Text="حروف إنجليزية صغيرة وأرقام فقط: من 1 إلى 4 أحرف ومن 1 إلى 4 أرقام، بلا رموز أو أحرف كبيرة." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" FontSize="12" Margin="0,4,0,14" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left"><Button Style="{StaticResource PrimaryButtonStyle}" Click="Save_Click" Content="حفظ المستخدم" /><Button Style="{StaticResource SecondaryButtonStyle}" Click="Cancel_Click" Content="إلغاء" /></StackPanel>
+  </StackPanel></Border>
+</ui:FluentWindow>

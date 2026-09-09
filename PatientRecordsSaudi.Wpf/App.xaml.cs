@@ -1,0 +1,117 @@
+using System.IO;
+using System.Threading;
+using System.Windows;
+using PatientRecordsSaudi.Services;
+
+namespace PatientRecordsSaudi.Wpf;
+
+public partial class App : System.Windows.Application
+{
+    private Mutex? instanceMutex;
+    private AppDatabase? database;
+    private SecuritySession? session;
+    public static string DataDirectory { get; private set; } = string.Empty;
+
+    protected override void OnStartup(StartupEventArgs e)
+    {
+        base.OnStartup(e);
+        if (e.Args.Any(value => string.Equals(value, "--self-test", StringComparison.OrdinalIgnoreCase)))
+        {
+            Environment.ExitCode = RunStandaloneSelfTest();
+            Shutdown(Environment.ExitCode);
+            return;
+        }
+
+        instanceMutex = new Mutex(true, @"Local\SaudiPatientRecordsV5_64DD9F48_4C80_45A8_A169_F79CE8D6D211", out bool firstInstance);
+        if (!firstInstance)
+        {
+            MessageBox.Show("البرنامج يعمل بالفعل. افتحه من شريط المهام.", "سجلات المراجعين", MessageBoxButton.OK, MessageBoxImage.Information, MessageBoxResult.OK, MessageBoxOptions.RtlReading);
+            Shutdown();
+            return;
+        }
+
+        AppDomain.CurrentDomain.UnhandledException += (_, args) => LogUnexpectedError(args.ExceptionObject as Exception, "Fatal");
+        DispatcherUnhandledException += (_, args) =>
+        {
+            LogUnexpectedError(args.Exception, "UI");
+            MessageBox.Show("حدث خطأ غير متوقع. البيانات المكتملة محفوظة؛ أعد المحاولة أو أعد تشغيل البرنامج إذا تكرر الخطأ.", "خطأ غير متوقع", MessageBoxButton.OK, MessageBoxImage.Error, MessageBoxResult.OK, MessageBoxOptions.RtlReading);
+            args.Handled = true;
+        };
+
+        try
+        {
+            DataDirectory = AppProfile.ResolveDataDirectory(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
+            AppProfile.Initialize(DataDirectory);
+            AppDatabase.CleanupTemporaryAttachments();
+
+            var security = new AppSecurity(DataDirectory);
+            security.EnsureDefaultConfiguration();
+            if (security.IsLoginRequired)
+            {
+                var login = new LoginWindow(security);
+                if (login.ShowDialog() != true || login.Session is null) { Shutdown(); return; }
+                session = login.Session;
+            }
+            else
+            {
+                session = security.OpenWithoutLogin();
+            }
+
+            database = new AppDatabase(DataDirectory, session.MaterializeDatabasePassword(), session.DisplayName, session.Role);
+            security.FlushPendingAudit(database);
+            var main = new MainWindow(database, new BackupService(DataDirectory), security, session);
+            MainWindow = main;
+            ShutdownMode = ShutdownMode.OnMainWindowClose;
+            main.Show();
+        }
+        catch (Exception ex)
+        {
+            LogUnexpectedError(ex, "Startup");
+            MessageBox.Show("تعذر فتح قاعدة البيانات.\n\n" + ex.Message, "تعذر التشغيل", MessageBoxButton.OK, MessageBoxImage.Error, MessageBoxResult.OK, MessageBoxOptions.RtlReading);
+            Shutdown();
+        }
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        try { database?.Checkpoint(); } catch { }
+        database?.Dispose();
+        session?.Dispose();
+        try { AppDatabase.CleanupTemporaryAttachments(); } catch { }
+        instanceMutex?.Dispose();
+        base.OnExit(e);
+    }
+
+    private static int RunStandaloneSelfTest()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "SaudiPatientRecordsWpf_" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(folder);
+            var security = new AppSecurity(folder);
+            if (!security.EnsureDefaultConfiguration() || security.IsLoginRequired) return 3;
+            using SecuritySession local = security.OpenWithoutLogin();
+            using var db = new AppDatabase(folder, local.MaterializeDatabasePassword(), local.DisplayName, local.Role);
+            if (db.CountActivePatients() != 0 || db.GetSettings().NextFileNumber != 1) return 2;
+            security.AddUser(local, "tester1", "مدير الفحص", "مدير", "test1234");
+            security.SetLoginRequired(local, true);
+            using SecuritySession authenticated = security.Login("tester1", "test1234");
+            if (!authenticated.IsAdmin) return 4;
+            security.SetLoginRequired(local, false);
+            db.Checkpoint();
+            return 0;
+        }
+        catch { return 1; }
+        finally { try { Directory.Delete(folder, true); } catch { } }
+    }
+
+    private static void LogUnexpectedError(Exception? exception, string area)
+    {
+        try
+        {
+            Directory.CreateDirectory(DataDirectory);
+            File.AppendAllText(Path.Combine(DataDirectory, "errors.log"), DateTime.UtcNow.ToString("O") + " | " + area + " | " + (exception?.GetType().FullName ?? "Unknown") + Environment.NewLine);
+        }
+        catch { }
+    }
+}
