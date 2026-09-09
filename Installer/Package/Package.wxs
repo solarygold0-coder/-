@@ -4,7 +4,7 @@
   <Package Id="MohammedMousaAsiri.SaudiPatientRecords"
            Name="نظام إدارة سجلات المراجعين"
            Manufacturer="Mohammed Mousa Asiri"
-           Version="5.3.0"
+           Version="$(var.ProductVersion)"
            Language="1025"
            Scope="perUser"
            InstallerVersion="500"
@@ -16,14 +16,15 @@
 
     <StandardDirectory Id="LocalAppDataFolder">
       <Directory Id="LocalProgramsFolder" Name="Programs">
-        <Directory Id="INSTALLFOLDER" Name="Saudi Patient Records 5">
+        <Directory Id="INSTALLFOLDER" Name="Saudi Patient Records 6">
           <Component Id="ApplicationComponent" Guid="{A6E6C08A-4D18-47AC-A34D-1E7917AF02AE}" Bitness="always64">
             <File Id="ApplicationFile" Source="$(var.PublishDir)\SaudiPatientRecords.exe">
               <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="سجلات المراجعين" Description="نظام إدارة سجلات المراجعين" WorkingDirectory="INSTALLFOLDER" Advertise="no" />
               <Shortcut Id="DesktopShortcut" Directory="DesktopFolder" Name="سجلات المراجعين" Description="نظام إدارة سجلات المراجعين" WorkingDirectory="INSTALLFOLDER" Advertise="no" />
             </File>
-            <RegistryValue Root="HKCU" Key="Software\Mohammed Mousa Asiri\Saudi Patient Records V5" Name="InstallPath" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
-            <RemoveRegistryValue Id="RemoveLegacyAutoStart" Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="SaudiPatientRecords" />
+            <RegistryValue Root="HKCU" Key="Software\Mohammed Mousa Asiri\Saudi Patient Records V6" Name="InstallPath" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+            <RemoveRegistryValue Id="RemoveLegacyAutoStartV4" Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="SaudiPatientRecords" />
+            <RemoveRegistryValue Id="RemoveLegacyAutoStartV5" Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="SaudiPatientRecordsV5" />
             <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
             <RemoveFolder Id="RemoveLocalProgramsFolder" Directory="LocalProgramsFolder" On="uninstall" />
           </Component>

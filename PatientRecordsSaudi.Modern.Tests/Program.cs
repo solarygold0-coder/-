@@ -34,7 +34,7 @@ namespace PatientRecordsSaudi.Tests
                 Assert(!defaultSecurity.IsLoginRequired, "Login screen is disabled on a fresh installation");
                 using (SecuritySession passwordlessSession = defaultSecurity.OpenWithoutLogin())
                 {
-                    Assert(passwordlessSession.IsAdmin && passwordlessSession.Username == "local", "Application opens in a local administrative session without credentials");
+                    Assert(passwordlessSession.IsAdmin && passwordlessSession.Username == "local" && passwordlessSession.Role == "مالك محلي", "Application opens directly as a local owner without an admin account");
                     Assert(defaultSecurity.GetUsers(passwordlessSession).Count == 0, "Fresh installation contains no default accounts");
                     bool adminNameBlocked = false; try { defaultSecurity.AddUser(passwordlessSession, "admin", "اسم محظور", "مدير", "safe1234"); } catch (ArgumentException) { adminNameBlocked = true; } Assert(adminNameBlocked, "Reserved admin account is removed and cannot be recreated");
                     bool enableWithoutManagerBlocked = false; try { defaultSecurity.SetLoginRequired(passwordlessSession, true); } catch (InvalidOperationException) { enableWithoutManagerBlocked = true; } Assert(enableWithoutManagerBlocked, "Login cannot be enabled before creating a named manager");
@@ -49,19 +49,11 @@ namespace PatientRecordsSaudi.Tests
                 var legacySecurity = new AppSecurity(legacyFolder); legacySecurity.EnsureDefaultConfiguration();
                 using (SecuritySession legacyLocal = legacySecurity.OpenWithoutLogin()) { legacySecurity.AddUser(legacyLocal, "oldmanager", "مدير النسخة القديمة", "مدير", "oldm1234"); legacySecurity.SetLoginRequired(legacyLocal, true); }
                 string currentFolder = AppProfile.ResolveDataDirectory(profileRoot);
-                Assert(!string.Equals(currentFolder, legacyFolder, StringComparison.OrdinalIgnoreCase), "Version 5 uses a new independent data profile");
+                Assert(!string.Equals(currentFolder, legacyFolder, StringComparison.OrdinalIgnoreCase), "Version 6 uses a new independent data profile");
                 AppProfile.Initialize(currentFolder); var isolatedSecurity = new AppSecurity(currentFolder);
-                Assert(isolatedSecurity.EnsureDefaultConfiguration(), "Version 5 creates new security material instead of copying an older profile");
-                Assert(!isolatedSecurity.IsLoginRequired && legacySecurity.IsLoginRequired, "Older authentication settings cannot enable login in version 5");
-                Assert(File.Exists(Path.Combine(currentFolder, AppProfile.GenerationMarkerName)), "Independent version 5 profile marker is present");
-
-                string noImportFolder = Path.Combine(temp, "no-legacy-import"); Directory.CreateDirectory(noImportFolder);
-                byte[] obsoleteBytes = System.Text.Encoding.UTF8.GetBytes("obsolete database marker");
-                File.WriteAllBytes(Path.Combine(noImportFolder, "patients.db"), obsoleteBytes);
-                var noImportSecurity = new AppSecurity(noImportFolder); noImportSecurity.EnsureDefaultConfiguration();
-                using (SecuritySession noImportSession = noImportSecurity.OpenWithoutLogin())
-                using (var noImportDatabase = new AppDatabase(noImportFolder, noImportSession.MaterializeDatabasePassword(), noImportSession.DisplayName, noImportSession.Role))
-                    Assert(noImportDatabase.CountAllPatients() == 0 && File.ReadAllBytes(Path.Combine(noImportFolder, "patients.db")).SequenceEqual(obsoleteBytes), "Obsolete LiteDB files are ignored and cannot control the current database");
+                Assert(isolatedSecurity.EnsureDefaultConfiguration(), "Version 6 creates new security material instead of copying an older profile");
+                Assert(!isolatedSecurity.IsLoginRequired && legacySecurity.IsLoginRequired, "Older authentication settings cannot enable login in version 6");
+                Assert(File.Exists(Path.Combine(currentFolder, AppProfile.GenerationMarkerName)), "Independent version 6 profile marker is present");
 
                 string managerPassword = "test1234", employeePassword = "empl1234";
                 var security = new AppSecurity(temp); security.EnsureDefaultConfiguration(); SecuritySession admin = security.OpenWithoutLogin();
@@ -82,13 +74,14 @@ namespace PatientRecordsSaudi.Tests
                     Patient one = db.AddPatient(NewPatient(id1, "مراجع الاختبار الأول", TestMobile(1)));
                     Patient two = db.AddPatient(NewPatient(id2, "مراجع الاختبار الثاني", TestMobile(2)));
                     Assert(one.FileNumber == 1 && two.FileNumber == 2, "Sequential file numbering starts at 1");
+                    bool invalidPatientBlocked = false; try { db.AddPatient(NewPatient("123", "بيانات غير صالحة", TestMobile(9))); } catch (InvalidOperationException) { invalidPatientBlocked = true; } Assert(invalidPatientBlocked, "Data layer rejects an invalid Saudi identity even when UI validation is bypassed");
                     AppSettings settings = db.GetSettings(); Assert(settings.VisitTypes.Count > 0 && settings.AppointmentStatuses.Contains("حضر"), "Default configurable lookups"); settings.VisitTypes.Add("زيارة اختبار"); settings.WorkDayStartMinutes = 7 * 60 + 30; settings.WorkDayEndMinutes = 16 * 60 + 30; settings.DefaultAppointmentMinutes = 45; settings.BackupIntervalHours = 6; db.SaveSettings(settings); AppSettings savedSettings = db.GetSettings(); Assert(savedSettings.VisitTypes.Contains("زيارة اختبار") && savedSettings.WorkDayStartMinutes == 450 && savedSettings.WorkDayEndMinutes == 990 && savedSettings.DefaultAppointmentMinutes == 45 && savedSettings.BackupIntervalHours == 6, "WPF operational settings persisted");
                     AppSettings invalidDuration = db.GetSettings(); invalidDuration.DefaultAppointmentMinutes = 0; bool invalidDurationBlocked = false; try { db.SaveSettings(invalidDuration); } catch (InvalidOperationException) { invalidDurationBlocked = true; } Assert(invalidDurationBlocked, "Invalid default appointment duration is rejected");
                     string attachmentSource = Path.Combine(temp, "test.pdf"); File.WriteAllText(attachmentSource, "%PDF-1.4 test attachment"); PatientAttachment attachment = db.AddAttachment(two.Id, attachmentSource, "نتيجة");
                     Assert(db.GetAttachments(two.Id, false).Count == 1 && attachment.SizeBytes > 0, "Encrypted attachment stored in database"); string attachmentCopy = db.ExportAttachmentToTemporaryFile(attachment.Id); Assert(File.ReadAllText(attachmentCopy) == "%PDF-1.4 test attachment", "Attachment integrity verified on open"); db.DeleteAttachment(attachment.Id); Assert(db.GetAttachments(two.Id, false).Count == 0, "Attachment soft delete"); db.RestoreAttachment(attachment.Id); Assert(db.GetAttachments(two.Id, false).Count == 1, "Attachment restore");
                     string fakeImage = Path.Combine(temp, "fake.jpg"); File.WriteAllText(fakeImage, "not a jpeg"); bool fakeBlocked = false; try { db.AddAttachment(two.Id, fakeImage, "أخرى"); } catch (InvalidDataException) { fakeBlocked = true; } Assert(fakeBlocked, "Attachment content must match extension");
                     db.ArchivePatient(one.Id, "اختبار");
-                    Patient archived = db.GetPatient(one.Id); archived.City = "مدينة معدلة"; bool archivedEditBlocked = false; try { db.UpdatePatient(archived); } catch (InvalidOperationException) { archivedEditBlocked = true; } Assert(archivedEditBlocked, "Archived patient cannot be edited before restore");
+                    Patient archived = db.GetPatient(one.Id) ?? throw new InvalidOperationException("Archived patient missing in test."); archived.City = "مدينة معدلة"; bool archivedEditBlocked = false; try { db.UpdatePatient(archived); } catch (InvalidOperationException) { archivedEditBlocked = true; } Assert(archivedEditBlocked, "Archived patient cannot be edited before restore");
                     Patient three = db.AddPatient(NewPatient(id3, "مراجع الاختبار الثالث", TestMobile(3)));
                     Assert(three.FileNumber == 3, "Deleted/archived number is not reused");
                     DateTime firstAvailable = db.GetNextAvailableAppointmentTime(30);
@@ -99,20 +92,22 @@ namespace PatientRecordsSaudi.Tests
                     Assert(duplicateBlocked, "Duplicate national ID blocked");
 
                     int daysToSunday = ((int)DayOfWeek.Sunday - (int)DateTime.Today.DayOfWeek + 7) % 7; if (daysToSunday == 0) daysToSunday = 7; DateTime sunday = DateTime.Today.AddDays(daysToSunday).AddHours(9);
-                    Appointment saved = db.AddAppointment(new Appointment { PatientId = two.Id, FileNumber = two.FileNumber, PatientName = two.FullName, Title = "مراجعة", VisitType = "مراجعة", StartsAt = sunday, DurationMinutes = 30, Status = "مؤكد" });
-                    db.MarkAppointmentNotified(saved.Id); Appointment statusChanged = db.GetAppointment(saved.Id); statusChanged.Status = "بانتظار التأكيد"; db.UpdateAppointment(statusChanged);
-                    Assert(db.GetAppointment(saved.Id).ReminderNotifiedAt == null, "Appointment reminder resets when an active status changes");
+                    Appointment saved = db.AddAppointment(new Appointment { PatientId = two.Id, FileNumber = 9999, PatientName = "لقطة خاطئة", Title = "مراجعة", VisitType = "مراجعة", StartsAt = sunday, DurationMinutes = 30, Status = "مؤكد" });
+                    Assert(saved.FileNumber == two.FileNumber && saved.PatientName == two.FullName, "Appointment patient snapshot is enforced from the referenced patient record");
+                    db.MarkAppointmentNotified(saved.Id); Appointment statusChanged = db.GetAppointment(saved.Id) ?? throw new InvalidOperationException("Appointment missing in test."); statusChanged.Status = "بانتظار التأكيد"; db.UpdateAppointment(statusChanged);
+                    Assert(db.GetAppointment(saved.Id)?.ReminderNotifiedAt == null, "Appointment reminder resets when an active status changes");
                     bool conflictBlocked = false;
                     try { db.AddAppointment(new Appointment { PatientId = three.Id, FileNumber = three.FileNumber, PatientName = three.FullName, Title = "متعارض", VisitType = "مراجعة", StartsAt = sunday.AddMinutes(15), DurationMinutes = 30, Status = "مؤكد" }); } catch (AppointmentConflictException) { conflictBlocked = true; }
                     Assert(conflictBlocked, "Overlapping appointment blocked");
                     Appointment cancelled = db.AddAppointment(new Appointment { PatientId = three.Id, FileNumber = three.FileNumber, PatientName = three.FullName, Title = "ملغي", VisitType = "مراجعة", StartsAt = sunday.AddMinutes(15), DurationMinutes = 30, Status = "ملغي" }); Assert(cancelled != null, "Cancelled appointment does not reserve the slot");
-                    PatientTask reminderTask = db.AddTask(new PatientTask { PatientId = three.Id, FileNumber = three.FileNumber, PatientName = three.FullName, Title = "متابعة", DueAt = sunday, Priority = "عادية" });
+                    PatientTask reminderTask = db.AddTask(new PatientTask { PatientId = three.Id, FileNumber = 9999, PatientName = "لقطة خاطئة", Title = "متابعة", DueAt = sunday, Priority = "عادية" });
+                    Assert(reminderTask.FileNumber == three.FileNumber && reminderTask.PatientName == three.FullName, "Task patient snapshot is enforced from the referenced patient record");
                     db.MarkTaskNotified(reminderTask.Id); PatientTask completedTask = db.GetPatientTasks(three.Id).First(x => x.Id == reminderTask.Id); completedTask.IsCompleted = true; db.UpdateTask(completedTask);
                     PatientTask reopenedTask = db.GetPatientTasks(three.Id).First(x => x.Id == reminderTask.Id); reopenedTask.IsCompleted = false; db.UpdateTask(reopenedTask);
                     Assert(db.GetPatientTasks(three.Id).First(x => x.Id == reminderTask.Id).ReminderNotifiedAt == null, "Task reminder resets when a task is reopened");
                     db.DeleteAppointment(saved.Id); Assert(db.GetDeletedAppointments().Count == 1 && db.GetAppointments(null, null).Count == 1, "Appointment soft delete");
                     db.RestoreAppointment(saved.Id); Assert(db.GetAppointments(null, null).Count == 2, "Appointment restore");
-                    db.ArchivePatient(two.Id, "اختبار", true); Assert(db.GetAppointment(saved.Id).Status == "ملغي", "Archiving closes future appointments");
+                    db.ArchivePatient(two.Id, "اختبار", true); Assert(db.GetAppointment(saved.Id)?.Status == "ملغي", "Archiving closes future appointments");
                     DateTime monday = sunday.AddDays(1); db.AddClosure(monday, "إجازة اختبار"); bool closureBlocked = false;
                     try { db.AddAppointment(new Appointment { PatientId = three.Id, FileNumber = three.FileNumber, PatientName = three.FullName, Title = "إجازة", VisitType = "مراجعة", StartsAt = monday, DurationMinutes = 30, Status = "مؤكد" }); } catch (InvalidOperationException) { closureBlocked = true; }
                     Assert(closureBlocked, "Configured closure date blocks appointments");
@@ -131,6 +126,7 @@ namespace PatientRecordsSaudi.Tests
                 using (var staffDb = new AppDatabase(temp, admin.MaterializeDatabasePassword(), employee.DisplayName, "موظف"))
                 {
                     bool settingsBlocked = false; try { staffDb.SaveSettings(staffDb.GetSettings()); } catch (UnauthorizedAccessException) { settingsBlocked = true; } Assert(settingsBlocked, "Admin-only settings are enforced in data layer");
+                    bool backupBlocked = false; try { new BackupService(temp).CreateBackup(Path.Combine(temp, "staff-backup"), staffDb); } catch (UnauthorizedAccessException) { backupBlocked = true; } Assert(backupBlocked, "Manual backup is blocked for non-manager accounts in the data layer");
                 }
                 RunTenThousandCapacityTest(temp);
                 employee.Dispose(); admin.Dispose();

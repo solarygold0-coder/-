@@ -19,6 +19,7 @@ public partial class TaskEditorWindow : FluentWindow
         this.database = database;
         original = task;
         InitializeComponent();
+        DataObject.AddPastingHandler(FileNumberBox, DigitsOnly_Paste);
         PriorityBox.ItemsSource = database.GetSettings().TaskPriorities;
         if (PriorityBox.Items.Count > 0) PriorityBox.SelectedIndex = 0;
         DuePicker.ConfigureYearRange(DateTime.Today.Year, DateTime.Today.Year + 10);
@@ -29,6 +30,10 @@ public partial class TaskEditorWindow : FluentWindow
     }
 
     private void DigitsOnly_PreviewTextInput(object sender, TextCompositionEventArgs e) => e.Handled = e.Text.Any(c => !char.IsDigit(c));
+    private static void DigitsOnly_Paste(object sender, DataObjectPastingEventArgs e)
+    {
+        if (!e.DataObject.GetDataPresent(DataFormats.UnicodeText) || e.DataObject.GetData(DataFormats.UnicodeText) is not string value || value.Any(c => !char.IsDigit(c))) e.CancelCommand();
+    }
     private void ResolvePatient_Click(object sender, RoutedEventArgs e) => ResolvePatient(true);
     private bool ResolvePatient(bool showError)
     {

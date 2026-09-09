@@ -5,8 +5,7 @@
     Title="نظام إدارة سجلات المراجعين" Width="1440" Height="900"
     MinWidth="980" MinHeight="700" WindowStartupLocation="CenterScreen"
     WindowState="Maximized" FlowDirection="RightToLeft" FontFamily="Segoe UI" FontSize="14"
-    Background="{StaticResource CanvasBrush}" SizeChanged="MainWindow_SizeChanged"
-    PreviewKeyDown="MainWindow_PreviewKeyDown">
+    Background="{StaticResource CanvasBrush}" SizeChanged="MainWindow_SizeChanged">
   <Grid>
     <Grid.ColumnDefinitions>
       <ColumnDefinition Width="*" />
@@ -16,7 +15,7 @@
     <Border Grid.Column="1" Background="{StaticResource PrimaryDarkBrush}">
       <Grid>
         <Grid.RowDefinitions>
-          <RowDefinition Height="160" />
+          <RowDefinition Height="138" />
           <RowDefinition Height="*" />
           <RowDefinition Height="92" />
         </Grid.RowDefinitions>
@@ -29,18 +28,18 @@
         </StackPanel>
 
         <StackPanel Grid.Row="1" Margin="0,8">
-          <Button x:Name="DashboardNav" Style="{StaticResource NavButtonStyle}" Click="DashboardNav_Click" Background="#1F715A" AutomationProperties.Name="الرئيسية"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource NavIconStyle}" Text="&#xE80F;" /><TextBlock Text="الرئيسية" /></StackPanel></Button>
-          <Button x:Name="PatientsNav" Style="{StaticResource NavButtonStyle}" Click="PatientsNav_Click" AutomationProperties.Name="المراجعون"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource NavIconStyle}" Text="&#xE716;" /><TextBlock Text="المراجعون" /></StackPanel></Button>
-          <Button x:Name="AppointmentsNav" Style="{StaticResource NavButtonStyle}" Click="AppointmentsNav_Click" AutomationProperties.Name="المواعيد"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource NavIconStyle}" Text="&#xE787;" /><TextBlock Text="المواعيد" /></StackPanel></Button>
-          <Button x:Name="TasksNav" Style="{StaticResource NavButtonStyle}" Click="TasksNav_Click" AutomationProperties.Name="المهام والتنبيهات"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource NavIconStyle}" Text="&#xE9D5;" /><TextBlock Text="المهام والتنبيهات" /></StackPanel></Button>
-          <Button x:Name="InventoryNav" Style="{StaticResource NavButtonStyle}" Click="InventoryNav_Click" AutomationProperties.Name="الجرد السنوي"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource NavIconStyle}" Text="&#xE8A5;" /><TextBlock Text="الجرد السنوي" /></StackPanel></Button>
-          <Button x:Name="SettingsNav" Style="{StaticResource NavButtonStyle}" Click="SettingsNav_Click" AutomationProperties.Name="الإعدادات"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource NavIconStyle}" Text="&#xE713;" /><TextBlock Text="الإعدادات" /></StackPanel></Button>
+          <Button x:Name="DashboardNav" Style="{StaticResource NavButtonStyle}" Click="DashboardNav_Click" Background="#1F715A"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource NavIconStyle}" Text="&#xE80F;" /><TextBlock Text="الرئيسية" VerticalAlignment="Center" /></StackPanel></Button>
+          <Button x:Name="PatientsNav" Style="{StaticResource NavButtonStyle}" Click="PatientsNav_Click"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource NavIconStyle}" Text="&#xE77B;" /><TextBlock Text="المراجعون" VerticalAlignment="Center" /></StackPanel></Button>
+          <Button x:Name="AppointmentsNav" Style="{StaticResource NavButtonStyle}" Click="AppointmentsNav_Click"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource NavIconStyle}" Text="&#xE787;" /><TextBlock Text="المواعيد" VerticalAlignment="Center" /></StackPanel></Button>
+          <Button x:Name="TasksNav" Style="{StaticResource NavButtonStyle}" Click="TasksNav_Click"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource NavIconStyle}" Text="&#xE9D5;" /><TextBlock Text="المهام والتنبيهات" VerticalAlignment="Center" /></StackPanel></Button>
+          <Button x:Name="InventoryNav" Style="{StaticResource NavButtonStyle}" Click="InventoryNav_Click"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource NavIconStyle}" Text="&#xE8FD;" /><TextBlock Text="الجرد السنوي" VerticalAlignment="Center" /></StackPanel></Button>
+          <Button x:Name="SettingsNav" Style="{StaticResource NavButtonStyle}" Click="SettingsNav_Click"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource NavIconStyle}" Text="&#xE713;" /><TextBlock Text="الإعدادات" VerticalAlignment="Center" /></StackPanel></Button>
         </StackPanel>
 
         <Border Grid.Row="2" BorderBrush="#2A6B5B" BorderThickness="0,1,0,0" Padding="20,14">
           <StackPanel>
             <TextBlock x:Name="SessionNameText" Foreground="White" FontWeight="SemiBold" Text="المستخدم المحلي" />
-            <TextBlock Text="الإصدار 5.3 — WPF Fluent" Foreground="#A6C8BC" FontSize="12" Margin="0,4,0,0" />
+            <TextBlock Text="الإصدار 6.0 — WPF Fluent" Foreground="#A6C8BC" FontSize="12" Margin="0,4,0,0" />
           </StackPanel>
         </Border>
       </Grid>
@@ -59,7 +58,7 @@
             <TextBlock x:Name="ClinicNameText" Text="نظام إدارة سجلات المراجعين" Foreground="{StaticResource MutedBrush}" FontSize="12" />
           </StackPanel>
           <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" FlowDirection="LeftToRight">
-            <Button Style="{StaticResource SecondaryButtonStyle}" Click="Refresh_Click" MinWidth="48" ToolTip="تحديث البيانات (F5)" AutomationProperties.Name="تحديث البيانات"><TextBlock FontFamily="Segoe Fluent Icons" Text="&#xE72C;" FontSize="18" /></Button>
+            <Button Style="{StaticResource SecondaryButtonStyle}" Click="Refresh_Click" MinWidth="48" Content="⟳" ToolTip="تحديث البيانات" />
             <TextBlock x:Name="TodayText" VerticalAlignment="Center" Foreground="#334155" FontWeight="SemiBold" Margin="14,0" FlowDirection="RightToLeft" />
           </StackPanel>
         </Grid>
@@ -95,7 +94,7 @@
                 <Border x:Name="DashboardAppointmentsCard" Style="{StaticResource CardStyle}" Margin="6,6,8,6">
                   <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="360" /></Grid.RowDefinitions>
-                    <DockPanel Margin="0,0,0,12" LastChildFill="True"><Button DockPanel.Dock="Left" Style="{StaticResource LinkButtonStyle}" Click="AppointmentsNav_Click" Content="عرض الكل ←" /><TextBlock Text="مواعيد اليوم" FontSize="18" FontWeight="Bold" VerticalAlignment="Center" /></DockPanel>
+                    <Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock Text="مواعيد اليوم" FontSize="18" FontWeight="Bold" VerticalAlignment="Center" /><Button Grid.Column="1" Style="{StaticResource LinkButtonStyle}" Click="AppointmentsNav_Click" Content="عرض الكل ←" /></Grid>
                     <DataGrid Grid.Row="1" x:Name="DashboardTodayGrid">
                       <DataGrid.Columns>
                         <DataGridTextColumn Header="الوقت" Binding="{Binding TimeText}" Width="90" />
@@ -111,7 +110,7 @@
                 <Border x:Name="DashboardTasksCard" Grid.Column="1" Style="{StaticResource CardStyle}" Margin="8,6,6,6">
                   <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="360" /></Grid.RowDefinitions>
-                    <DockPanel Margin="0,0,0,12" LastChildFill="True"><Button DockPanel.Dock="Left" Style="{StaticResource LinkButtonStyle}" Click="TasksNav_Click" Content="عرض الكل ←" /><TextBlock Text="المهام المفتوحة" FontSize="18" FontWeight="Bold" VerticalAlignment="Center" /></DockPanel>
+                    <Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock Text="المهام المفتوحة" FontSize="18" FontWeight="Bold" VerticalAlignment="Center" /><Button Grid.Column="1" Style="{StaticResource LinkButtonStyle}" Click="TasksNav_Click" Content="عرض الكل ←" /></Grid>
                     <DataGrid Grid.Row="1" x:Name="DashboardTasksGrid">
                       <DataGrid.Columns>
                         <DataGridTextColumn Header="الأولوية" Binding="{Binding Priority}" Width="90" />
@@ -131,9 +130,9 @@
         <Border x:Name="PatientsPage" Padding="22" Visibility="Collapsed">
           <Grid>
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-            <DockPanel Margin="4,0,4,14" LastChildFill="True"><WrapPanel DockPanel.Dock="Left"><Button Style="{StaticResource PrimaryButtonStyle}" Click="NewPatient_Click" Content="＋  مراجع جديد" /><Button Style="{StaticResource SecondaryButtonStyle}" Click="EditPatient_Click" Content="فتح ملف المراجع" /><Button Style="{StaticResource SecondaryButtonStyle}" Click="NewAppointmentForPatient_Click" Content="موعد للمحدد" /><Button Style="{StaticResource DangerButtonStyle}" Click="ArchivePatient_Click" Content="أرشفة / استعادة" /></WrapPanel><TextBlock Text="المراجعون" Style="{StaticResource PageTitleStyle}" VerticalAlignment="Center" /></DockPanel>
+            <DockPanel Margin="4,0,4,14" LastChildFill="True"><WrapPanel DockPanel.Dock="Left"><Button Style="{StaticResource PrimaryButtonStyle}" Click="NewPatient_Click" Content="＋  مراجع جديد" /><Button Style="{StaticResource SecondaryButtonStyle}" Click="EditPatient_Click" Content="فتح ملف المراجع" /><Button Style="{StaticResource SecondaryButtonStyle}" Click="NewAppointmentForPatient_Click" Content="موعد للمحدد" /><Button x:Name="ArchivePatientButton" Style="{StaticResource DangerButtonStyle}" Click="ArchivePatient_Click" Content="أرشفة / استعادة" /></WrapPanel><TextBlock Text="المراجعون" Style="{StaticResource PageTitleStyle}" VerticalAlignment="Center" /></DockPanel>
             <Border Grid.Row="1" Style="{StaticResource CardStyle}" Margin="4,0,4,14" Padding="14"><WrapPanel>
-              <TextBox x:Name="PatientSearchText" Width="290" Margin="5" ToolTip="اكتب بيانات البحث" AutomationProperties.Name="نص البحث عن مراجع" TextChanged="PatientSearch_Changed" />
+              <TextBox x:Name="PatientSearchText" Width="290" Margin="5" ToolTip="اكتب بيانات البحث" TextChanged="PatientSearch_Changed" />
               <ComboBox x:Name="PatientSearchMode" Width="170" Margin="5" SelectionChanged="PatientSearch_Changed"><ComboBoxItem Content="الكل" IsSelected="True" /><ComboBoxItem Content="رقم الملف" /><ComboBoxItem Content="الهوية/الإقامة" /><ComboBoxItem Content="الاسم" /><ComboBoxItem Content="رقم الجوال" /><ComboBoxItem Content="المدينة" /></ComboBox>
               <ComboBox x:Name="PatientSortMode" Width="150" Margin="5" SelectionChanged="PatientSearch_Changed"><ComboBoxItem Content="رقم الملف" IsSelected="True" /><ComboBoxItem Content="الاسم" /><ComboBoxItem Content="الأحدث" /><ComboBoxItem Content="آخر مراجعة" /></ComboBox>
               <CheckBox x:Name="ShowArchivedCheck" Content="إظهار المؤرشفين" VerticalAlignment="Center" Margin="14,0" Checked="PatientSearch_Changed" Unchecked="PatientSearch_Changed" />
@@ -155,7 +154,7 @@
         <Border x:Name="AppointmentsPage" Padding="22" Visibility="Collapsed">
           <Grid>
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-            <DockPanel Margin="4,0,4,14" LastChildFill="True"><WrapPanel DockPanel.Dock="Left"><Button Style="{StaticResource PrimaryButtonStyle}" Click="NewAppointment_Click" Content="＋  موعد جديد" /><Button Style="{StaticResource SecondaryButtonStyle}" Click="EditAppointment_Click" Content="تعديل الموعد" /><Button Style="{StaticResource SecondaryButtonStyle}" Click="PrintAppointment_Click" Content="طباعة الموعد" /><Button Style="{StaticResource DangerButtonStyle}" Click="DeleteAppointment_Click" Content="نقل للمحذوفات" /></WrapPanel><TextBlock Text="المواعيد" Style="{StaticResource PageTitleStyle}" VerticalAlignment="Center" /></DockPanel>
+            <DockPanel Margin="4,0,4,14" LastChildFill="True"><WrapPanel DockPanel.Dock="Left"><Button Style="{StaticResource PrimaryButtonStyle}" Click="NewAppointment_Click" Content="＋  موعد جديد" /><Button Style="{StaticResource SecondaryButtonStyle}" Click="EditAppointment_Click" Content="تعديل الموعد" /><Button Style="{StaticResource SecondaryButtonStyle}" Click="PrintAppointment_Click" Content="طباعة الموعد" /><Button x:Name="DeleteAppointmentButton" Style="{StaticResource DangerButtonStyle}" Click="DeleteAppointment_Click" Content="نقل للمحذوفات" /></WrapPanel><TextBlock Text="المواعيد" Style="{StaticResource PageTitleStyle}" VerticalAlignment="Center" /></DockPanel>
             <Border Grid.Row="1" Style="{StaticResource CardStyle}" Margin="4,0,4,14" Padding="14"><WrapPanel><TextBlock Text="عرض:" VerticalAlignment="Center" Margin="5" /><ComboBox x:Name="AppointmentFilter" Width="180" Margin="5" SelectionChanged="AppointmentFilter_Changed"><ComboBoxItem Content="القادمة" IsSelected="True" /><ComboBoxItem Content="اليوم" /><ComboBoxItem Content="هذا الأسبوع" /><ComboBoxItem Content="الكل" /></ComboBox><TextBlock Text="انقر على اسم المراجع أو الموعد لفتح ملفه." Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="20,0" /></WrapPanel></Border>
             <Border Grid.Row="2" Style="{StaticResource CardStyle}" Margin="4" Padding="0"><Grid><DataGrid x:Name="AppointmentsGrid">
               <DataGrid.Columns>
@@ -174,7 +173,7 @@
         <Border x:Name="TasksPage" Padding="22" Visibility="Collapsed">
           <Grid>
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-            <DockPanel Margin="4,0,4,14" LastChildFill="True"><WrapPanel DockPanel.Dock="Left"><Button Style="{StaticResource PrimaryButtonStyle}" Click="NewTask_Click" Content="＋  مهمة جديدة" /><Button Style="{StaticResource SecondaryButtonStyle}" Click="EditTask_Click" Content="تعديل" /><Button Style="{StaticResource SecondaryButtonStyle}" Click="ToggleTask_Click" Content="تغيير الحالة" /><Button Style="{StaticResource DangerButtonStyle}" Click="DeleteTask_Click" Content="نقل للمحذوفات" /></WrapPanel><TextBlock Text="المهام والتنبيهات" Style="{StaticResource PageTitleStyle}" VerticalAlignment="Center" /></DockPanel>
+            <DockPanel Margin="4,0,4,14" LastChildFill="True"><WrapPanel DockPanel.Dock="Left"><Button Style="{StaticResource PrimaryButtonStyle}" Click="NewTask_Click" Content="＋  مهمة جديدة" /><Button Style="{StaticResource SecondaryButtonStyle}" Click="EditTask_Click" Content="تعديل" /><Button Style="{StaticResource SecondaryButtonStyle}" Click="ToggleTask_Click" Content="تغيير الحالة" /><Button x:Name="DeleteTaskButton" Style="{StaticResource DangerButtonStyle}" Click="DeleteTask_Click" Content="نقل للمحذوفات" /></WrapPanel><TextBlock Text="المهام والتنبيهات" Style="{StaticResource PageTitleStyle}" VerticalAlignment="Center" /></DockPanel>
             <Border Grid.Row="1" Style="{StaticResource CardStyle}" Margin="4,0,4,14" Padding="14"><WrapPanel><CheckBox x:Name="ShowCompletedCheck" Content="إظهار المهام المكتملة" Margin="8" Checked="ShowCompleted_Changed" Unchecked="ShowCompleted_Changed" /><TextBlock Text="انقر على اسم المراجع أو المهمة لفتح ملفه." Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="20,0" /></WrapPanel></Border>
             <Border Grid.Row="2" Style="{StaticResource CardStyle}" Margin="4" Padding="0"><Grid><DataGrid x:Name="TasksGrid">
               <DataGrid.Columns>
@@ -192,7 +191,7 @@
         <Border x:Name="InventoryPage" Padding="22" Visibility="Collapsed">
           <Grid>
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-            <DockPanel Margin="4,0,4,14" LastChildFill="True"><WrapPanel DockPanel.Dock="Left"><Button Style="{StaticResource SecondaryButtonStyle}" Click="EditInventoryPatient_Click" Content="فتح الملف" /><Button Style="{StaticResource DangerButtonStyle}" Click="ArchiveInventory_Click" Content="أرشفة بعد المراجعة" /></WrapPanel><StackPanel><TextBlock Text="الجرد السنوي" Style="{StaticResource PageTitleStyle}" /><TextBlock Text="ملفات لم يسجل لها نشاط منذ عشر سنوات أو أكثر. الأرشفة لا تعيد استخدام رقم الملف." Foreground="{StaticResource MutedBrush}" Margin="0,5,0,0" /></StackPanel></DockPanel>
+            <DockPanel Margin="4,0,4,14" LastChildFill="True"><WrapPanel DockPanel.Dock="Left"><Button Style="{StaticResource SecondaryButtonStyle}" Click="EditInventoryPatient_Click" Content="فتح الملف" /><Button x:Name="ArchiveInventoryButton" Style="{StaticResource DangerButtonStyle}" Click="ArchiveInventory_Click" Content="أرشفة بعد المراجعة" /></WrapPanel><StackPanel><TextBlock Text="الجرد السنوي" Style="{StaticResource PageTitleStyle}" /><TextBlock Text="ملفات لم يسجل لها نشاط منذ عشر سنوات أو أكثر. الأرشفة لا تعيد استخدام رقم الملف." Foreground="{StaticResource MutedBrush}" Margin="0,5,0,0" /></StackPanel></DockPanel>
             <Border Grid.Row="1" Background="#FFF7ED" BorderBrush="#FED7AA" BorderThickness="1" CornerRadius="12" Padding="14" Margin="4,0,4,14"><TextBlock Text="تنبيه: راجع المتطلبات النظامية وسياسة المنشأة قبل أرشفة أي سجل." Foreground="#9A3412" FontWeight="SemiBold" /></Border>
             <Border Grid.Row="2" Style="{StaticResource CardStyle}" Margin="4" Padding="0"><Grid><DataGrid x:Name="InventoryGrid" MouseDoubleClick="InventoryGrid_MouseDoubleClick">
               <DataGrid.Columns><DataGridTextColumn Header="رقم الملف" Binding="{Binding FileNumber}" Width="100" /><DataGridTemplateColumn Header="اسم المراجع" Width="2*"><DataGridTemplateColumn.CellTemplate><DataTemplate><Button Style="{StaticResource LinkButtonStyle}" Content="{Binding FullName}" Click="OpenPatientFromRow_Click" /></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn><DataGridTextColumn Header="الهوية / الإقامة" Binding="{Binding NationalId}" Width="180" /><DataGridTextColumn Header="الجوال" Binding="{Binding Mobile}" Width="150" /><DataGridTextColumn Header="آخر مراجعة" Binding="{Binding LastVisitAt, StringFormat=yyyy/MM/dd}" Width="150" /></DataGrid.Columns>
@@ -201,63 +200,103 @@
         </Border>
 
         <Border x:Name="SettingsPage" Padding="22" Visibility="Collapsed">
-          <Grid MaxWidth="1120" HorizontalAlignment="Stretch">
-            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-            <StackPanel Margin="4,0,4,14">
-              <TextBlock Text="الإعدادات" Style="{StaticResource PageTitleStyle}" />
-              <TextBlock Text="قسّمت الخيارات إلى أقسام واضحة حتى تصل إلى ما تحتاجه بسرعة." Foreground="{StaticResource MutedBrush}" Margin="0,5,0,0" />
+          <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel MaxWidth="1120" HorizontalAlignment="Stretch">
+              <TextBlock Text="الإعدادات" Style="{StaticResource PageTitleStyle}" Margin="4,0,4,14" />
+              <Border Style="{StaticResource CardStyle}">
+                <StackPanel>
+                  <TextBlock Text="بيانات المنشأة" FontSize="18" FontWeight="Bold" Margin="0,0,0,14" />
+                  <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="130" /><ColumnDefinition Width="*" /><ColumnDefinition Width="130" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                    <TextBlock Text="اسم المنشأة" VerticalAlignment="Center" /><TextBox Grid.Column="1" x:Name="ClinicNameBox" Margin="5" />
+                    <TextBlock Grid.Column="2" Text="رقم التواصل" VerticalAlignment="Center" /><TextBox Grid.Column="3" x:Name="ClinicPhoneBox" Margin="5" />
+                    <TextBlock Grid.Row="1" Text="العنوان" VerticalAlignment="Center" /><TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" x:Name="ClinicAddressBox" Margin="5" />
+                  </Grid>
+                  <Separator Margin="4,14" />
+                  <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="130" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <TextBlock Text="شعار الطباعة" VerticalAlignment="Center" />
+                    <WrapPanel Grid.Column="1">
+                      <Button x:Name="ChooseLogoButton" Style="{StaticResource SecondaryButtonStyle}" Click="ChooseClinicLogo_Click" Content="اختيار شعار" />
+                      <Button x:Name="RemoveLogoButton" Style="{StaticResource DangerButtonStyle}" Click="RemoveClinicLogo_Click" Content="إزالة الشعار" />
+                      <TextBlock x:Name="ClinicLogoStatusText" VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}" Margin="12,0" />
+                    </WrapPanel>
+                  </Grid>
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource CardStyle}">
+                <StackPanel>
+                  <TextBlock Text="الدوام والمواعيد" FontSize="18" FontWeight="Bold" Margin="0,0,0,12" />
+                  <TextBlock Text="يمنع النظام تلقائيًا حجز الجمعة والسبت وأيام الإغلاق، كما يمنع أي موعد خارج ساعات الدوام." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,12" />
+                  <WrapPanel>
+                    <StackPanel Width="250" Margin="4"><TextBlock Text="بداية الدوام" FontWeight="SemiBold" Margin="4" /><ComboBox x:Name="WorkStartBox" IsEditable="False" /></StackPanel>
+                    <StackPanel Width="250" Margin="4"><TextBlock Text="نهاية الدوام" FontWeight="SemiBold" Margin="4" /><ComboBox x:Name="WorkEndBox" IsEditable="False" /></StackPanel>
+                    <StackPanel Width="250" Margin="4"><TextBlock Text="مدة الموعد الافتراضية" FontWeight="SemiBold" Margin="4" /><ComboBox x:Name="DefaultDurationBox" IsEditable="False" /></StackPanel>
+                  </WrapPanel>
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource CardStyle}">
+                <StackPanel>
+                  <TextBlock Text="القوائم القابلة للتخصيص" FontSize="18" FontWeight="Bold" />
+                  <TextBlock Text="اكتب قيمة واحدة في كل سطر. يجب أن تتضمن حالات الموعد «حضر» و«ملغي»." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,12" />
+                  <WrapPanel>
+                    <StackPanel Width="330" Margin="4"><TextBlock Text="أنواع الزيارة" FontWeight="SemiBold" Margin="4" /><TextBox x:Name="VisitTypesText" Height="120" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" /></StackPanel>
+                    <StackPanel Width="330" Margin="4"><TextBlock Text="حالات الموعد" FontWeight="SemiBold" Margin="4" /><TextBox x:Name="AppointmentStatusesText" Height="120" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" /></StackPanel>
+                    <StackPanel Width="330" Margin="4"><TextBlock Text="أولويات المهام" FontWeight="SemiBold" Margin="4" /><TextBox x:Name="TaskPrioritiesText" Height="120" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" /></StackPanel>
+                    <StackPanel Width="330" Margin="4"><TextBlock Text="خيارات الجنس" FontWeight="SemiBold" Margin="4" /><TextBox x:Name="GenderOptionsText" Height="120" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" /></StackPanel>
+                    <StackPanel Width="330" Margin="4"><TextBlock Text="فصائل الدم" FontWeight="SemiBold" Margin="4" /><TextBox x:Name="BloodTypesText" Height="120" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" /></StackPanel>
+                  </WrapPanel>
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource CardStyle}">
+                <StackPanel>
+                  <TextBlock Text="النسخ الاحتياطي التلقائي" FontSize="18" FontWeight="Bold" />
+                  <TextBlock Text="تُحفظ النسخ داخل مجلد بيانات التطبيق افتراضيًا. اختيار قرص خارجي يوفر حماية أفضل عند تعطل قرص الجهاز." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,12" />
+                  <WrapPanel>
+                    <StackPanel Width="250" Margin="4"><TextBlock Text="التكرار" FontWeight="SemiBold" Margin="4" /><ComboBox x:Name="BackupIntervalBox" /></StackPanel>
+                    <StackPanel Width="680" Margin="4"><TextBlock Text="مجلد النسخ" FontWeight="SemiBold" Margin="4" /><DockPanel><Button x:Name="InternalBackupFolderButton" DockPanel.Dock="Left" Style="{StaticResource SecondaryButtonStyle}" Click="ResetAutoBackupDirectory_Click" Content="المجلد الداخلي" /><Button x:Name="ChooseBackupFolderButton" DockPanel.Dock="Left" Style="{StaticResource SecondaryButtonStyle}" Click="ChooseAutoBackupDirectory_Click" Content="اختيار مجلد" /><TextBox x:Name="AutoBackupDirectoryBox" IsReadOnly="True" Margin="5" /></DockPanel></StackPanel>
+                  </WrapPanel>
+                  <TextBlock x:Name="BackupStatusText" Foreground="{StaticResource MutedBrush}" Margin="5,10,5,0" TextWrapping="Wrap" />
+                </StackPanel>
+              </Border>
+
+              <Grid x:Name="SettingsActionsGrid">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                <Border x:Name="SecuritySettingsCard" Style="{StaticResource CardStyle}">
+                  <StackPanel>
+                    <TextBlock Text="الدخول والصلاحيات" FontSize="18" FontWeight="Bold" />
+                    <TextBlock Text="يفتح التطبيق مباشرة افتراضيًا بلا اسم مستخدم أو كلمة مرور. أنشئ حسابًا باسم شخصي ثم فعّل الدخول فقط عند الحاجة." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8" />
+                    <CheckBox x:Name="RequireLoginCheck" Content="طلب تسجيل الدخول عند بدء التطبيق" Margin="4,8" />
+                    <Button x:Name="ManageUsersButton" Style="{StaticResource SecondaryButtonStyle}" HorizontalAlignment="Right" Click="ManageUsers_Click" Content="إدارة المستخدمين والصلاحيات" />
+                  </StackPanel>
+                </Border>
+                <Border x:Name="BackupSettingsCard" Grid.Column="1" Style="{StaticResource CardStyle}">
+                  <StackPanel>
+                    <TextBlock Text="النسخ والاستعادة" FontSize="18" FontWeight="Bold" />
+                    <TextBlock Text="نسخة محمية تضم قاعدة SQLite المشفرة وإعدادات فتحها." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8" />
+                    <WrapPanel><Button x:Name="CreateBackupButton" Style="{StaticResource PrimaryButtonStyle}" Click="CreateBackup_Click" Content="إنشاء نسخة الآن" /><Button x:Name="RestoreBackupButton" Style="{StaticResource SecondaryButtonStyle}" Click="RestoreBackup_Click" Content="استعادة نسخة" /></WrapPanel>
+                  </StackPanel>
+                </Border>
+              </Grid>
+
+              <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                <Border Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="أيام الإغلاق والإجازات" FontSize="18" FontWeight="Bold" /><TextBlock Text="تمنع المواعيد في الأيام المحددة، إضافة إلى الجمعة والسبت." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8" /><Button x:Name="ClosuresButton" Style="{StaticResource SecondaryButtonStyle}" HorizontalAlignment="Right" Click="Closures_Click" Content="إدارة أيام الإغلاق" /></StackPanel></Border>
+                <Border Grid.Column="1" Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="المحذوفات القابلة للاستعادة" FontSize="18" FontWeight="Bold" /><TextBlock Text="استعادة المواعيد والمهام التي نُقلت إلى المحذوفات." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8" /><Button x:Name="RecycleBinButton" Style="{StaticResource SecondaryButtonStyle}" HorizontalAlignment="Right" Click="RecycleBin_Click" Content="فتح المحذوفات" /></StackPanel></Border>
+              </Grid>
+
+              <Button x:Name="SaveSettingsButton" Style="{StaticResource PrimaryButtonStyle}" HorizontalAlignment="Left" MinWidth="190" Click="SaveSettings_Click" Content="حفظ جميع الإعدادات" />
+
+              <Border Style="{StaticResource CardStyle}" Background="#ECFDF5" BorderBrush="#A7F3D0">
+                <StackPanel><TextBlock Text="واجهة حديثة" FontSize="18" FontWeight="Bold" Foreground="{StaticResource PrimaryDarkBrush}" /><TextBlock Text="WPF على .NET 10 + مكتبة WPF-UI 4.3 (Fluent) — قاعدة بيانات SQLite مشفرة — تطبيق Win32 مستقل غير محزوم." TextWrapping="Wrap" Foreground="#166534" Margin="0,8,0,0" /></StackPanel>
+              </Border>
             </StackPanel>
-
-            <TabControl Grid.Row="1" x:Name="SettingsTabs" Margin="0,0,0,12" AutomationProperties.Name="أقسام الإعدادات">
-              <TabItem Header="المنشأة">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                  <StackPanel Margin="8">
-                    <Border Style="{StaticResource CardStyle}">
-                      <StackPanel>
-                        <TextBlock Text="بيانات المنشأة" FontSize="18" FontWeight="Bold" Margin="0,0,0,14" />
-                        <Grid>
-                          <Grid.ColumnDefinitions><ColumnDefinition Width="130" /><ColumnDefinition Width="*" /><ColumnDefinition Width="130" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                          <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                          <TextBlock Text="اسم المنشأة" VerticalAlignment="Center" /><TextBox Grid.Column="1" x:Name="ClinicNameBox" Margin="5" AutomationProperties.Name="اسم المنشأة" />
-                          <TextBlock Grid.Column="2" Text="رقم التواصل" VerticalAlignment="Center" /><TextBox Grid.Column="3" x:Name="ClinicPhoneBox" Margin="5" AutomationProperties.Name="رقم تواصل المنشأة" />
-                          <TextBlock Grid.Row="1" Text="العنوان" VerticalAlignment="Center" /><TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" x:Name="ClinicAddressBox" Margin="5" AutomationProperties.Name="عنوان المنشأة" />
-                        </Grid>
-                        <Separator Margin="4,14" />
-                        <Grid>
-                          <Grid.ColumnDefinitions><ColumnDefinition Width="130" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                          <TextBlock Text="شعار الطباعة" VerticalAlignment="Center" />
-                          <WrapPanel Grid.Column="1"><Button Style="{StaticResource SecondaryButtonStyle}" Click="ChooseClinicLogo_Click" Content="اختيار شعار" /><Button Style="{StaticResource DangerButtonStyle}" Click="RemoveClinicLogo_Click" Content="إزالة الشعار" /><TextBlock x:Name="ClinicLogoStatusText" VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}" Margin="12,0" /></WrapPanel>
-                        </Grid>
-                      </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource CardStyle}" Background="#ECFDF5" BorderBrush="#A7F3D0"><StackPanel><TextBlock Text="البنية الحالية" FontSize="18" FontWeight="Bold" Foreground="{StaticResource PrimaryDarkBrush}" /><TextBlock Text="WPF على .NET 10 + WPF-UI 4.3 Fluent — SQLite مشفرة — تطبيق Win32 مستقل غير محزوم، بلا مشروع WinForms قديم." TextWrapping="Wrap" Foreground="#166534" Margin="0,8,0,0" /></StackPanel></Border>
-                  </StackPanel>
-                </ScrollViewer>
-              </TabItem>
-
-              <TabItem Header="الدوام والقوائم">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                  <StackPanel Margin="8">
-                    <Border Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="الدوام والمواعيد" FontSize="18" FontWeight="Bold" Margin="0,0,0,12" /><TextBlock Text="يمنع النظام حجز الجمعة والسبت وأيام الإغلاق وأي موعد خارج ساعات الدوام." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,12" /><WrapPanel><StackPanel Width="250" Margin="4"><TextBlock Text="بداية الدوام" FontWeight="SemiBold" Margin="4" /><ComboBox x:Name="WorkStartBox" AutomationProperties.Name="بداية الدوام" /></StackPanel><StackPanel Width="250" Margin="4"><TextBlock Text="نهاية الدوام" FontWeight="SemiBold" Margin="4" /><ComboBox x:Name="WorkEndBox" AutomationProperties.Name="نهاية الدوام" /></StackPanel><StackPanel Width="250" Margin="4"><TextBlock Text="مدة الموعد الافتراضية" FontWeight="SemiBold" Margin="4" /><ComboBox x:Name="DefaultDurationBox" AutomationProperties.Name="مدة الموعد الافتراضية" /></StackPanel></WrapPanel></StackPanel></Border>
-                    <Border Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="القوائم القابلة للتخصيص" FontSize="18" FontWeight="Bold" /><TextBlock Text="اكتب قيمة واحدة في كل سطر. يجب أن تتضمن حالات الموعد «حضر» و«ملغي»." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,12" /><WrapPanel><StackPanel Width="315" Margin="4"><TextBlock Text="أنواع الزيارة" FontWeight="SemiBold" Margin="4" /><TextBox x:Name="VisitTypesText" Height="120" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" /></StackPanel><StackPanel Width="315" Margin="4"><TextBlock Text="حالات الموعد" FontWeight="SemiBold" Margin="4" /><TextBox x:Name="AppointmentStatusesText" Height="120" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" /></StackPanel><StackPanel Width="315" Margin="4"><TextBlock Text="أولويات المهام" FontWeight="SemiBold" Margin="4" /><TextBox x:Name="TaskPrioritiesText" Height="120" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" /></StackPanel><StackPanel Width="315" Margin="4"><TextBlock Text="خيارات الجنس" FontWeight="SemiBold" Margin="4" /><TextBox x:Name="GenderOptionsText" Height="120" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" /></StackPanel><StackPanel Width="315" Margin="4"><TextBlock Text="فصائل الدم" FontWeight="SemiBold" Margin="4" /><TextBox x:Name="BloodTypesText" Height="120" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" /></StackPanel></WrapPanel></StackPanel></Border>
-                    <Border Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="أيام الإغلاق والإجازات" FontSize="18" FontWeight="Bold" /><TextBlock Text="تمنع المواعيد في الأيام المحددة، إضافة إلى الجمعة والسبت." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8" /><Button Style="{StaticResource SecondaryButtonStyle}" HorizontalAlignment="Right" Click="Closures_Click" Content="إدارة أيام الإغلاق" /></StackPanel></Border>
-                  </StackPanel>
-                </ScrollViewer>
-              </TabItem>
-
-              <TabItem Header="الحماية والنسخ">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                  <StackPanel Margin="8">
-                    <Border Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="النسخ الاحتياطي التلقائي" FontSize="18" FontWeight="Bold" /><TextBlock Text="تُحفظ النسخ داخل مجلد بيانات التطبيق افتراضيًا. اختيار قرص خارجي يوفر حماية أفضل عند تعطل قرص الجهاز." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,12" /><WrapPanel><StackPanel Width="250" Margin="4"><TextBlock Text="التكرار" FontWeight="SemiBold" Margin="4" /><ComboBox x:Name="BackupIntervalBox" AutomationProperties.Name="فترة النسخ الاحتياطي" /></StackPanel><StackPanel Width="650" Margin="4"><TextBlock Text="مجلد النسخ" FontWeight="SemiBold" Margin="4" /><DockPanel><Button DockPanel.Dock="Left" Style="{StaticResource SecondaryButtonStyle}" Click="ResetAutoBackupDirectory_Click" Content="المجلد الداخلي" /><Button DockPanel.Dock="Left" Style="{StaticResource SecondaryButtonStyle}" Click="ChooseAutoBackupDirectory_Click" Content="اختيار مجلد" /><TextBox x:Name="AutoBackupDirectoryBox" IsReadOnly="True" Margin="5" /></DockPanel></StackPanel></WrapPanel><TextBlock x:Name="BackupStatusText" Foreground="{StaticResource MutedBrush}" Margin="5,10,5,0" TextWrapping="Wrap" /></StackPanel></Border>
-                    <Grid x:Name="SettingsActionsGrid"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions><Border x:Name="SecuritySettingsCard" Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="الدخول والصلاحيات" FontSize="18" FontWeight="Bold" /><TextBlock Text="يفتح التطبيق مباشرة افتراضيًا بلا اسم مستخدم أو كلمة مرور. أنشئ حسابًا باسم شخصي ثم فعّل الدخول فقط عند الحاجة." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8" /><CheckBox x:Name="RequireLoginCheck" Content="طلب تسجيل الدخول عند بدء التطبيق" Margin="4,8" /><Button Style="{StaticResource SecondaryButtonStyle}" HorizontalAlignment="Right" Click="ManageUsers_Click" Content="إدارة المستخدمين والصلاحيات" /></StackPanel></Border><Border x:Name="BackupSettingsCard" Grid.Column="1" Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="النسخ والاستعادة" FontSize="18" FontWeight="Bold" /><TextBlock Text="نسخة محمية تضم قاعدة SQLite المشفرة وإعدادات فتحها." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8" /><WrapPanel><Button Style="{StaticResource PrimaryButtonStyle}" Click="CreateBackup_Click" Content="إنشاء نسخة الآن" /><Button Style="{StaticResource SecondaryButtonStyle}" Click="RestoreBackup_Click" Content="استعادة نسخة" /></WrapPanel></StackPanel></Border></Grid>
-                    <Border Style="{StaticResource CardStyle}"><StackPanel><TextBlock Text="المحذوفات القابلة للاستعادة" FontSize="18" FontWeight="Bold" /><TextBlock Text="استعادة المواعيد والمهام والمرفقات التي نُقلت إلى المحذوفات." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8" /><Button Style="{StaticResource SecondaryButtonStyle}" HorizontalAlignment="Right" Click="RecycleBin_Click" Content="فتح المحذوفات" /></StackPanel></Border>
-                  </StackPanel>
-                </ScrollViewer>
-              </TabItem>
-            </TabControl>
-
-            <Border Grid.Row="2" Background="White" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="12"><DockPanel><TextBlock Text="تُحفظ التغييرات في جميع الأقسام دفعة واحدة." Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" /><Button DockPanel.Dock="Left" Style="{StaticResource PrimaryButtonStyle}" MinWidth="190" Click="SaveSettings_Click" Content="حفظ جميع الإعدادات" AutomationProperties.Name="حفظ جميع الإعدادات" /></DockPanel></Border>
-          </Grid>
+          </ScrollViewer>
         </Border>
       </Grid>
     </Grid>

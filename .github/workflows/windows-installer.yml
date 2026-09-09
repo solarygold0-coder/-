@@ -3,6 +3,8 @@ name: Windows interactive installer
 on:
   workflow_dispatch:
   push:
+    branches: [ main, v6-clean-rebuild ]
+  pull_request:
     branches: [ main ]
 
 permissions:
@@ -22,11 +24,11 @@ jobs:
         run: .\build-installer.ps1
       - name: Create source archive
         shell: pwsh
-        run: git archive --format=zip --output=release-installer/SaudiPatientRecords-Source-v5.3.0.zip HEAD
+        run: git archive --format=zip --output=release-installer/SaudiPatientRecords-Source-v6.0.0.zip HEAD
       - name: Upload installer deliverables
         uses: actions/upload-artifact@v4
         with:
-          name: Saudi-Patient-Records-v5.3.0
+          name: Saudi-Patient-Records-v6.0.0
           path: release-installer/*
           if-no-files-found: error
           retention-days: 14

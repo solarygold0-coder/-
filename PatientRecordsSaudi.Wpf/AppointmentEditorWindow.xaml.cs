@@ -19,6 +19,7 @@ public partial class AppointmentEditorWindow : FluentWindow
         this.database = database;
         original = appointment;
         InitializeComponent();
+        DataObject.AddPastingHandler(FileNumberBox, DigitsOnly_Paste);
         AppSettings settings = database.GetSettings();
         VisitTypeBox.ItemsSource = settings.VisitTypes;
         StatusBox.ItemsSource = settings.AppointmentStatuses;
@@ -38,6 +39,10 @@ public partial class AppointmentEditorWindow : FluentWindow
     }
 
     private void DigitsOnly_PreviewTextInput(object sender, TextCompositionEventArgs e) => e.Handled = e.Text.Any(c => !char.IsDigit(c));
+    private static void DigitsOnly_Paste(object sender, DataObjectPastingEventArgs e)
+    {
+        if (!e.DataObject.GetDataPresent(DataFormats.UnicodeText) || e.DataObject.GetData(DataFormats.UnicodeText) is not string value || value.Any(c => !char.IsDigit(c))) e.CancelCommand();
+    }
     private static string ComboText(ComboBox combo) => combo.SelectedItem is ComboBoxItem item ? item.Content?.ToString() ?? "" : combo.SelectedItem?.ToString() ?? combo.Text;
     private static void SelectCombo(ComboBox combo, string value)
     {

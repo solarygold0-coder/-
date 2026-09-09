@@ -9,11 +9,11 @@
     </StackPanel>
     <StackPanel Margin="0,0,6,6">
       <TextBlock Text="الشهر الميلادي" Foreground="{StaticResource MutedBrush}" Margin="3,0,3,4" />
-      <ComboBox x:Name="MonthBox" Width="150" DisplayMemberPath="Label" SelectedValuePath="Number" />
+      <ComboBox x:Name="MonthBox" Width="150" DisplayMemberPath="Label" SelectedValuePath="Number" SelectionChanged="CalendarPart_SelectionChanged" />
     </StackPanel>
     <StackPanel Margin="0,0,6,6">
       <TextBlock Text="السنة" Foreground="{StaticResource MutedBrush}" Margin="3,0,3,4" />
-      <ComboBox x:Name="YearBox" Width="92" />
+      <ComboBox x:Name="YearBox" Width="92" SelectionChanged="CalendarPart_SelectionChanged" />
     </StackPanel>
     <StackPanel x:Name="TimePanel" Orientation="Horizontal">
       <StackPanel Margin="0,0,6,6">
