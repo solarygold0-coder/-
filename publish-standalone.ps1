@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$Runtime = "win-x64",
-    [string]$Version = "5.2.0"
+    [string]$Version = "5.3.0"
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,6 +11,10 @@ $app = Join-Path $root "PatientRecordsSaudi.Wpf\PatientRecordsSaudi.Wpf.csproj"
 $intermediate = Join-Path $root "artifacts\publish\$Runtime"
 $release = Join-Path $root "release-standalone"
 $releaseExe = Join-Path $release "Saudi-Patient-Records.exe"
+
+if (Test-Path (Join-Path $root "PatientRecordsSaudi\PatientRecordsSaudi.csproj")) { throw "Obsolete WinForms project must not be shipped." }
+if (Test-Path (Join-Path $root "PatientRecordsSaudi\UI")) { throw "Obsolete WinForms UI sources must not be shipped." }
+if (Select-String -Path (Join-Path $root "PatientRecordsSaudi.Modern.Core\PatientRecordsSaudi.Modern.Core.csproj") -Pattern "LiteDB" -Quiet) { throw "Legacy LiteDB dependency must not be shipped." }
 
 if (Test-Path $intermediate) { Remove-Item $intermediate -Recurse -Force }
 if (Test-Path $release) { Remove-Item $release -Recurse -Force }
@@ -58,6 +62,8 @@ $size = (Get-Item $releaseExe).Length
     "Packaging=Unpackaged Win32 single-file EXE"
     "Runtime=.NET 10 self-contained"
     "Frontend=WPF + WPF-UI 4.3 Fluent"
+    "LegacyUI=None; WinForms project and LiteDB migration removed"
+    "ResponsiveChecks=1440x900 and 980x700 actual WPF captures"
     "DefaultAccount=None"
     "StartupLogin=Disabled; a named manager account is required before enabling"
     "DataProfile=Independent SaudiPatientRecordsV5; no automatic legacy copy"

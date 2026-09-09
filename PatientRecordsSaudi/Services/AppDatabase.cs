@@ -47,7 +47,6 @@ namespace PatientRecordsSaudi.Services
             currentUser = string.IsNullOrWhiteSpace(user) ? "النظام" : user.Trim();
             currentRole = string.IsNullOrWhiteSpace(role) ? "قراءة فقط" : role;
             Open();
-            ImportLegacyDatabaseIfNeeded();
         }
 
         public void SetCurrentUser(string user) { currentUser = string.IsNullOrWhiteSpace(user) ? "النظام" : user.Trim(); }

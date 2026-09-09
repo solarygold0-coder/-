@@ -60,6 +60,13 @@
         </Setter>
       </Style>
 
+      <Style x:Key="NavIconStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="Segoe Fluent Icons" />
+        <Setter Property="FontSize" Value="19" />
+        <Setter Property="Width" Value="34" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+      </Style>
+
       <Style x:Key="PrimaryButtonStyle" TargetType="Button">
         <Setter Property="MinHeight" Value="42" />
         <Setter Property="MinWidth" Value="118" />

@@ -21,8 +21,10 @@ public partial class App : System.Windows.Application
         int captureIndex = Array.FindIndex(e.Args, value => string.Equals(value, "--capture-ui", StringComparison.OrdinalIgnoreCase));
         if (captureIndex >= 0)
         {
-            string output = captureIndex + 1 < e.Args.Length ? e.Args[captureIndex + 1] : Path.Combine(Environment.CurrentDirectory, "Saudi-Patient-Records-v5.2.0-Actual-UI.png");
-            Environment.ExitCode = CaptureActualInterface(output);
+            string output = captureIndex + 1 < e.Args.Length ? e.Args[captureIndex + 1] : Path.Combine(Environment.CurrentDirectory, "Saudi-Patient-Records-v5.3.0-Actual-UI.png");
+            int width = captureIndex + 2 < e.Args.Length && int.TryParse(e.Args[captureIndex + 2], out int parsedWidth) ? parsedWidth : 1440;
+            int height = captureIndex + 3 < e.Args.Length && int.TryParse(e.Args[captureIndex + 3], out int parsedHeight) ? parsedHeight : 900;
+            Environment.ExitCode = CaptureActualInterface(output, width, height);
             Shutdown(Environment.ExitCode);
             return;
         }
@@ -117,7 +119,7 @@ public partial class App : System.Windows.Application
         finally { try { Directory.Delete(folder, true); } catch { } }
     }
 
-    private static int CaptureActualInterface(string outputPath)
+    private static int CaptureActualInterface(string outputPath, int requestedWidth, int requestedHeight)
     {
         string folder = Path.Combine(Path.GetTempPath(), "SaudiPatientRecordsCapture_" + Guid.NewGuid().ToString("N"));
         try
@@ -144,8 +146,8 @@ public partial class App : System.Windows.Application
             var window = new MainWindow(db, new BackupService(folder), security, local)
             {
                 WindowState = WindowState.Normal,
-                Width = 1440,
-                Height = 900,
+                Width = Math.Max(980, requestedWidth),
+                Height = Math.Max(700, requestedHeight),
                 Left = 20,
                 Top = 20,
                 ShowInTaskbar = false

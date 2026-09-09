@@ -2,8 +2,6 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PatientRecordsSaudi", "PatientRecordsSaudi.csproj", "{D7F9D8F4-5209-4BF0-AB7B-1C7B4F2289ED}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PatientRecordsSaudi.Modern.Core", "..\PatientRecordsSaudi.Modern.Core\PatientRecordsSaudi.Modern.Core.csproj", "{42C1B73F-821E-4E2F-9B7E-028631039A39}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PatientRecordsSaudi.Modern.Tests", "..\PatientRecordsSaudi.Modern.Tests\PatientRecordsSaudi.Modern.Tests.csproj", "{D947026E-1356-4D35-8AA2-87EC9D2A9D9A}"
@@ -16,10 +14,6 @@ Global
 		Release|x64 = Release|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{D7F9D8F4-5209-4BF0-AB7B-1C7B4F2289ED}.Debug|x64.ActiveCfg = Debug|x64
-		{D7F9D8F4-5209-4BF0-AB7B-1C7B4F2289ED}.Debug|x64.Build.0 = Debug|x64
-		{D7F9D8F4-5209-4BF0-AB7B-1C7B4F2289ED}.Release|x64.ActiveCfg = Release|x64
-		{D7F9D8F4-5209-4BF0-AB7B-1C7B4F2289ED}.Release|x64.Build.0 = Release|x64
 		{42C1B73F-821E-4E2F-9B7E-028631039A39}.Debug|x64.ActiveCfg = Debug|Any CPU
 		{42C1B73F-821E-4E2F-9B7E-028631039A39}.Debug|x64.Build.0 = Debug|Any CPU
 		{42C1B73F-821E-4E2F-9B7E-028631039A39}.Release|x64.ActiveCfg = Release|Any CPU

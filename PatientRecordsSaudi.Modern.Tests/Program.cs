@@ -55,6 +55,14 @@ namespace PatientRecordsSaudi.Tests
                 Assert(!isolatedSecurity.IsLoginRequired && legacySecurity.IsLoginRequired, "Older authentication settings cannot enable login in version 5");
                 Assert(File.Exists(Path.Combine(currentFolder, AppProfile.GenerationMarkerName)), "Independent version 5 profile marker is present");
 
+                string noImportFolder = Path.Combine(temp, "no-legacy-import"); Directory.CreateDirectory(noImportFolder);
+                byte[] obsoleteBytes = System.Text.Encoding.UTF8.GetBytes("obsolete database marker");
+                File.WriteAllBytes(Path.Combine(noImportFolder, "patients.db"), obsoleteBytes);
+                var noImportSecurity = new AppSecurity(noImportFolder); noImportSecurity.EnsureDefaultConfiguration();
+                using (SecuritySession noImportSession = noImportSecurity.OpenWithoutLogin())
+                using (var noImportDatabase = new AppDatabase(noImportFolder, noImportSession.MaterializeDatabasePassword(), noImportSession.DisplayName, noImportSession.Role))
+                    Assert(noImportDatabase.CountAllPatients() == 0 && File.ReadAllBytes(Path.Combine(noImportFolder, "patients.db")).SequenceEqual(obsoleteBytes), "Obsolete LiteDB files are ignored and cannot control the current database");
+
                 string managerPassword = "test1234", employeePassword = "empl1234";
                 var security = new AppSecurity(temp); security.EnsureDefaultConfiguration(); SecuritySession admin = security.OpenWithoutLogin();
                 bool invalidPasswordBlocked = false; try { security.AddUser(admin, "invalid", "مدير الاختبار", "مدير", "UPPER1"); } catch (ArgumentException) { invalidPasswordBlocked = true; } Assert(invalidPasswordBlocked, "Custom password policy rejects uppercase and requires lowercase letters plus digits");

@@ -28,10 +28,14 @@ jobs:
       - name: Capture actual WPF interface
         shell: powershell
         run: |
-          $image = Join-Path $PWD "release-standalone\Saudi-Patient-Records-v5.2.0-Actual-UI.png"
-          $process = Start-Process ".\release-standalone\Saudi-Patient-Records.exe" -ArgumentList @("--capture-ui", $image) -Wait -PassThru
-          if ($process.ExitCode -ne 0 -or -not (Test-Path $image)) { throw "Actual UI screenshot capture failed." }
-          if ((Get-Item $image).Length -lt 10000) { throw "Actual UI screenshot is unexpectedly small." }
+          $large = Join-Path $PWD "release-standalone\Saudi-Patient-Records-v5.3.0-Actual-UI.png"
+          $compact = Join-Path $PWD "release-standalone\Saudi-Patient-Records-v5.3.0-Actual-UI-Compact.png"
+          $largeProcess = Start-Process ".\release-standalone\Saudi-Patient-Records.exe" -ArgumentList @("--capture-ui", $large, "1440", "900") -Wait -PassThru
+          $compactProcess = Start-Process ".\release-standalone\Saudi-Patient-Records.exe" -ArgumentList @("--capture-ui", $compact, "980", "700") -Wait -PassThru
+          if ($largeProcess.ExitCode -ne 0 -or $compactProcess.ExitCode -ne 0) { throw "Actual UI screenshot capture failed." }
+          foreach ($image in @($large, $compact)) {
+            if (-not (Test-Path $image) -or (Get-Item $image).Length -lt 10000) { throw "Actual UI screenshot is missing or unexpectedly small: $image" }
+          }
 
       - name: Verify deliverable shape
         shell: powershell
@@ -45,7 +49,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Saudi-Patient-Records-Standalone-EXE-v5.2.0
+          name: Saudi-Patient-Records-Standalone-EXE-v5.3.0
           if-no-files-found: error
           compression-level: 0
           path: release-standalone/**

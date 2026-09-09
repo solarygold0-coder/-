@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$Runtime = "win-x64",
-    [string]$Version = "5.2.0"
+    [string]$Version = "5.3.0"
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,6 +12,10 @@ $package = Join-Path $root "InstallerV4\Package\Package.wixproj"
 $bundle = Join-Path $root "InstallerV4\Bundle\Bundle.wixproj"
 $publish = Join-Path $root "artifacts\installer-publish\$Runtime"
 $release = Join-Path $root "release-installer"
+
+if (Test-Path (Join-Path $root "PatientRecordsSaudi\PatientRecordsSaudi.csproj")) { throw "Obsolete WinForms project must not be shipped." }
+if (Test-Path (Join-Path $root "PatientRecordsSaudi\UI")) { throw "Obsolete WinForms UI sources must not be shipped." }
+if (Select-String -Path (Join-Path $root "PatientRecordsSaudi.Modern.Core\PatientRecordsSaudi.Modern.Core.csproj") -Pattern "LiteDB" -Quiet) { throw "Legacy LiteDB dependency must not be shipped." }
 
 if (Test-Path $publish) { Remove-Item $publish -Recurse -Force }
 if (Test-Path $release) { Remove-Item $release -Recurse -Force }
@@ -74,6 +78,7 @@ $standaloneHash = (Get-FileHash $standaloneOut -Algorithm SHA256).Hash.ToLowerIn
     "DataProfile=Independent SaudiPatientRecordsV5; no automatic legacy copy"
     "Database=Encrypted SQLite (SQLCipher)"
     "Frontend=WPF + WPF-UI 4.3 Fluent"
+    "LegacyUI=None; WinForms project and LiteDB migration removed"
     "DigitalSignature=None (unsigned public-source build)"
     "SetupSHA256=$setupHash"
     "StandaloneSHA256=$standaloneHash"
