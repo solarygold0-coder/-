@@ -28,7 +28,7 @@ public partial class TaskEditorWindow : FluentWindow
         else if (initialFileNumber.HasValue) { FileNumberBox.Text = initialFileNumber.Value.ToString(); ResolvePatient(false); }
     }
 
-    private static void DigitsOnly_PreviewTextInput(object sender, TextCompositionEventArgs e) => e.Handled = e.Text.Any(c => !char.IsDigit(c));
+    private void DigitsOnly_PreviewTextInput(object sender, TextCompositionEventArgs e) => e.Handled = e.Text.Any(c => !char.IsDigit(c));
     private void ResolvePatient_Click(object sender, RoutedEventArgs e) => ResolvePatient(true);
     private bool ResolvePatient(bool showError)
     {

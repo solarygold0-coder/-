@@ -53,8 +53,8 @@ public partial class PatientEditorWindow : FluentWindow
     }
 
     private static string ComboText(ComboBox combo) => combo.SelectedItem is ComboBoxItem item ? item.Content?.ToString() ?? "" : combo.SelectedItem?.ToString() ?? combo.Text;
-    private static void DigitsOnly_PreviewTextInput(object sender, TextCompositionEventArgs e) => e.Handled = e.Text.Any(c => !char.IsDigit(c));
-    private static void Phone_PreviewTextInput(object sender, TextCompositionEventArgs e) => e.Handled = e.Text.Any(c => !char.IsDigit(c) && c != '+' && c != '-' && c != ' ');
+    private void DigitsOnly_PreviewTextInput(object sender, TextCompositionEventArgs e) => e.Handled = e.Text.Any(c => !char.IsDigit(c));
+    private void Phone_PreviewTextInput(object sender, TextCompositionEventArgs e) => e.Handled = e.Text.Any(c => !char.IsDigit(c) && c != '+' && c != '-' && c != ' ');
 
     private void Save_Click(object sender, RoutedEventArgs e)
     {
