@@ -11,9 +11,9 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 using PatientRecordsSaudi.Models;
 using PatientRecordsSaudi.Services;
-using Wpf.Ui.Controls;
+using FluentWindow = global::Wpf.Ui.Controls.FluentWindow;
 
-namespace PatientRecordsSaudi.Wpf;
+namespace PatientRecordsSaudi.Desktop;
 
 public partial class MainWindow : FluentWindow
 {

@@ -1,8 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
-using Wpf.Ui.Controls;
+using FluentWindow = global::Wpf.Ui.Controls.FluentWindow;
 
-namespace PatientRecordsSaudi.Wpf;
+namespace PatientRecordsSaudi.Desktop;
 
 public partial class UserEditorWindow : FluentWindow
 {

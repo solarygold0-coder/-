@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Windows.Controls;
 
-namespace PatientRecordsSaudi.Wpf.Controls;
+namespace PatientRecordsSaudi.Desktop.Controls;
 
 public partial class DateTimeScrollPicker : UserControl
 {

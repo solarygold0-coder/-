@@ -1,9 +1,9 @@
 using System.Collections.ObjectModel;
 using System.Windows;
 using PatientRecordsSaudi.Services;
-using Wpf.Ui.Controls;
+using FluentWindow = global::Wpf.Ui.Controls.FluentWindow;
 
-namespace PatientRecordsSaudi.Wpf;
+namespace PatientRecordsSaudi.Desktop;
 
 public partial class AccountManagerWindow : FluentWindow
 {

@@ -3,7 +3,7 @@ using System.Threading;
 using System.Windows;
 using PatientRecordsSaudi.Services;
 
-namespace PatientRecordsSaudi.Wpf;
+namespace PatientRecordsSaudi.Desktop;
 
 public partial class App : System.Windows.Application
 {

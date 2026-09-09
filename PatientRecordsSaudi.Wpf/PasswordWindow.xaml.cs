@@ -1,7 +1,7 @@
 using System.Windows;
-using Wpf.Ui.Controls;
+using FluentWindow = global::Wpf.Ui.Controls.FluentWindow;
 
-namespace PatientRecordsSaudi.Wpf;
+namespace PatientRecordsSaudi.Desktop;
 
 public partial class PasswordWindow : FluentWindow
 {

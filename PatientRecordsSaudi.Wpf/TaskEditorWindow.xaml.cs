@@ -3,9 +3,9 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using PatientRecordsSaudi.Models;
 using PatientRecordsSaudi.Services;
-using Wpf.Ui.Controls;
+using FluentWindow = global::Wpf.Ui.Controls.FluentWindow;
 
-namespace PatientRecordsSaudi.Wpf;
+namespace PatientRecordsSaudi.Desktop;
 
 public partial class TaskEditorWindow : FluentWindow
 {
