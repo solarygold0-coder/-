@@ -15,7 +15,7 @@
     <Border Grid.Column="1" Background="{StaticResource PrimaryDarkBrush}">
       <Grid>
         <Grid.RowDefinitions>
-          <RowDefinition Height="138" />
+          <RowDefinition Height="160" />
           <RowDefinition Height="*" />
           <RowDefinition Height="92" />
         </Grid.RowDefinitions>
@@ -94,7 +94,7 @@
                 <Border x:Name="DashboardAppointmentsCard" Style="{StaticResource CardStyle}" Margin="6,6,8,6">
                   <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="360" /></Grid.RowDefinitions>
-                    <Grid Margin="0,0,0,12"><TextBlock Text="مواعيد اليوم" FontSize="18" FontWeight="Bold" /><Button HorizontalAlignment="Left" Style="{StaticResource LinkButtonStyle}" Click="AppointmentsNav_Click" Content="عرض الكل ←" /></Grid>
+                    <DockPanel Margin="0,0,0,12" LastChildFill="True"><Button DockPanel.Dock="Left" Style="{StaticResource LinkButtonStyle}" Click="AppointmentsNav_Click" Content="عرض الكل ←" /><TextBlock Text="مواعيد اليوم" FontSize="18" FontWeight="Bold" VerticalAlignment="Center" /></DockPanel>
                     <DataGrid Grid.Row="1" x:Name="DashboardTodayGrid">
                       <DataGrid.Columns>
                         <DataGridTextColumn Header="الوقت" Binding="{Binding TimeText}" Width="90" />
@@ -110,7 +110,7 @@
                 <Border x:Name="DashboardTasksCard" Grid.Column="1" Style="{StaticResource CardStyle}" Margin="8,6,6,6">
                   <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="360" /></Grid.RowDefinitions>
-                    <Grid Margin="0,0,0,12"><TextBlock Text="المهام المفتوحة" FontSize="18" FontWeight="Bold" /><Button HorizontalAlignment="Left" Style="{StaticResource LinkButtonStyle}" Click="TasksNav_Click" Content="عرض الكل ←" /></Grid>
+                    <DockPanel Margin="0,0,0,12" LastChildFill="True"><Button DockPanel.Dock="Left" Style="{StaticResource LinkButtonStyle}" Click="TasksNav_Click" Content="عرض الكل ←" /><TextBlock Text="المهام المفتوحة" FontSize="18" FontWeight="Bold" VerticalAlignment="Center" /></DockPanel>
                     <DataGrid Grid.Row="1" x:Name="DashboardTasksGrid">
                       <DataGrid.Columns>
                         <DataGridTextColumn Header="الأولوية" Binding="{Binding Priority}" Width="90" />
