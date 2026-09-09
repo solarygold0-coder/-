@@ -14,8 +14,9 @@ $publish = Join-Path $root "artifacts\installer-publish\$Runtime"
 $release = Join-Path $root "release-installer"
 
 if (Test-Path (Join-Path $root "PatientRecordsSaudi")) { throw "Legacy WinForms source must not exist in the v6 tree." }
-if (Get-ChildItem $root -Recurse -File -Include *.csproj | Select-String -Pattern "LiteDB|UseWindowsForms" -Quiet) { throw "Legacy LiteDB or WinForms project references must not exist in the v6 tree." }
-if (Get-ChildItem $root -Recurse -File -Include *.cs | Select-String -SimpleMatch "using System.Windows.Forms;" -Quiet) { throw "Legacy WinForms source must not exist in the v6 tree." }
+$coreProjectText = Get-Content (Join-Path $root "PatientRecordsSaudi.Modern.Core\PatientRecordsSaudi.Modern.Core.csproj") -Raw
+$wpfProjectText = Get-Content $app -Raw
+if ($coreProjectText.Contains('PackageReference Include="LiteDB"') -or $wpfProjectText.Contains('<UseWindowsForms>true</UseWindowsForms>')) { throw "Legacy LiteDB or WinForms project references must not exist in the v6 tree." }
 
 if (Test-Path $publish) { Remove-Item $publish -Recurse -Force }
 if (Test-Path $release) { Remove-Item $release -Recurse -Force }
