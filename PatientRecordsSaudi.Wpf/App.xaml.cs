@@ -93,6 +93,7 @@ public partial class App : System.Windows.Application
             using SecuritySession local = security.OpenWithoutLogin();
             using var db = new AppDatabase(folder, local.MaterializeDatabasePassword(), local.DisplayName, local.Role);
             if (db.CountActivePatients() != 0 || db.GetSettings().NextFileNumber != 1) return 2;
+            VerifyUiComposition(db, security, local, folder);
             security.AddUser(local, "tester1", "مدير الفحص", "مدير", "test1234");
             security.SetLoginRequired(local, true);
             using SecuritySession authenticated = security.Login("tester1", "test1234");
@@ -103,6 +104,23 @@ public partial class App : System.Windows.Application
         }
         catch { return 1; }
         finally { try { Directory.Delete(folder, true); } catch { } }
+    }
+
+    private static void VerifyUiComposition(AppDatabase database, AppSecurity security, SecuritySession session, string folder)
+    {
+        System.Windows.Window[] windows =
+        {
+            new MainWindow(database, new BackupService(folder), security, session),
+            new PatientEditorWindow(database, null, false),
+            new AppointmentEditorWindow(database, null, null),
+            new TaskEditorWindow(database, null, null),
+            new AccountManagerWindow(security, session),
+            new ClosureDatesWindow(database),
+            new RecycleBinWindow(database),
+            new UserEditorWindow(),
+            new PasswordWindow("فحص الواجهة")
+        };
+        foreach (System.Windows.Window window in windows) window.Close();
     }
 
     private static void LogUnexpectedError(Exception? exception, string area)
