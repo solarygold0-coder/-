@@ -1,3 +1,5 @@
+using System.IO;
+
 namespace SaudiPatientDesk.Data;
 
 public static class AppPaths
