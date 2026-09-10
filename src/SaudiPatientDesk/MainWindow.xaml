@@ -1,0 +1,148 @@
+<Window x:Class="SaudiPatientDesk.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="نظام سجلات المرضى" Width="1440" Height="900"
+        MinWidth="1120" MinHeight="700" WindowStartupLocation="CenterScreen">
+  <Grid>
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="260"/>
+      <ColumnDefinition Width="*"/>
+    </Grid.ColumnDefinitions>
+
+    <Border Grid.Column="0" Background="#102A43">
+      <Grid Margin="22">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="*"/>
+          <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <StackPanel Margin="2,18,2,28">
+          <Border Width="58" Height="58" CornerRadius="16" Background="#19A89D" HorizontalAlignment="Right">
+            <TextBlock Text="س" Foreground="White" FontSize="28" FontWeight="Bold" HorizontalAlignment="Center"/>
+          </Border>
+          <TextBlock Text="سجلات المرضى" Foreground="White" FontSize="23" FontWeight="Bold" Margin="0,15,0,2"/>
+          <TextBlock Text="إدارة العيادة" Foreground="#AFC4D6" FontSize="14"/>
+        </StackPanel>
+        <StackPanel Grid.Row="1">
+          <Button Style="{StaticResource NavButton}" Tag="dashboard" Click="Navigate_Click" Content="⌂  لوحة التحكم"/>
+          <Button Style="{StaticResource NavButton}" Tag="patients" Click="Navigate_Click" Content="♙  المرضى"/>
+          <Button Style="{StaticResource NavButton}" Tag="appointments" Click="Navigate_Click" Content="◷  المواعيد"/>
+          <Button Style="{StaticResource NavButton}" Tag="search" Click="Navigate_Click" Content="⌕  البحث الشامل"/>
+        </StackPanel>
+        <Border Grid.Row="3" Background="#173C5E" CornerRadius="12" Padding="14">
+          <StackPanel>
+            <TextBlock Text="الإصدار الجديد المستقل" Foreground="White" FontWeight="SemiBold"/>
+            <TextBlock Text="6.0 • قاعدة بيانات منفصلة" Foreground="#AFC4D6" FontSize="12" Margin="0,4,0,0"/>
+          </StackPanel>
+        </Border>
+      </Grid>
+    </Border>
+
+    <Grid Grid.Column="1" Margin="34,24,34,30">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="22"/>
+        <RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
+
+      <Grid>
+        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <StackPanel>
+          <TextBlock x:Name="PageTitle" Text="لوحة التحكم" FontSize="30" FontWeight="Bold"/>
+          <TextBlock x:Name="PageSubtitle" Text="ملخص العمل والمواعيد القادمة" Foreground="{StaticResource MutedBrush}" FontSize="14" Margin="0,5,0,0"/>
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" FlowDirection="LeftToRight" VerticalAlignment="Center">
+          <Button Style="{StaticResource SecondaryButton}" Margin="6,0" Click="Refresh_Click" Content="تحديث"/>
+          <Button Style="{StaticResource PrimaryButton}" Margin="6,0" Click="AddPatient_Click" Content="＋ إضافة مريض"/>
+          <Button Style="{StaticResource PrimaryButton}" Margin="6,0" Click="AddAppointment_Click" Content="＋ إضافة موعد"/>
+        </StackPanel>
+      </Grid>
+
+      <Grid Grid.Row="2">
+        <Grid x:Name="DashboardPanel">
+          <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="22"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+          <UniformGrid Columns="4" Rows="1">
+            <Border Style="{StaticResource MetricCard}" BorderBrush="#D7EFEA">
+              <StackPanel><TextBlock Text="إجمالي المرضى" Style="{StaticResource MetricLabel}"/><TextBlock x:Name="PatientsCount" Text="0" Style="{StaticResource MetricValue}" Foreground="#0B7A75"/></StackPanel>
+            </Border>
+            <Border Style="{StaticResource MetricCard}" BorderBrush="#DDE7F8">
+              <StackPanel><TextBlock Text="مواعيد اليوم" Style="{StaticResource MetricLabel}"/><TextBlock x:Name="TodayCount" Text="0" Style="{StaticResource MetricValue}" Foreground="#275DAD"/></StackPanel>
+            </Border>
+            <Border Style="{StaticResource MetricCard}" BorderBrush="#F8E8C2">
+              <StackPanel><TextBlock Text="تنبيهات يومين" Style="{StaticResource MetricLabel}"/><TextBlock x:Name="AlertsCount" Text="0" Style="{StaticResource MetricValue}" Foreground="#B26B00"/></StackPanel>
+            </Border>
+            <Border Style="{StaticResource MetricCard}" BorderBrush="#F4DADA">
+              <StackPanel><TextBlock Text="غير نشط 10 سنوات" Style="{StaticResource MetricLabel}"/><TextBlock x:Name="InactiveCount" Text="0" Style="{StaticResource MetricValue}" Foreground="#A63D40"/></StackPanel>
+            </Border>
+          </UniformGrid>
+          <Border Grid.Row="2" Background="White" CornerRadius="16" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="22">
+            <Grid>
+              <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="14"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+              <TextBlock Text="المواعيد القادمة" FontSize="20" FontWeight="Bold"/>
+              <DataGrid Grid.Row="2" x:Name="DashboardAppointmentsGrid" MouseDoubleClick="AppointmentGrid_DoubleClick">
+                <DataGrid.Columns>
+                  <DataGridTextColumn Header="رقم الملف" Binding="{Binding FileNumber}" Width="120"/>
+                  <DataGridTextColumn Header="اسم المريض" Binding="{Binding PatientName}" Width="*"/>
+                  <DataGridTextColumn Header="التاريخ والوقت" Binding="{Binding StartsAt, StringFormat=yyyy/MM/dd  hh:mm tt}" Width="220"/>
+                  <DataGridTextColumn Header="ملاحظات" Binding="{Binding Notes}" Width="280"/>
+                </DataGrid.Columns>
+              </DataGrid>
+            </Grid>
+          </Border>
+        </Grid>
+
+        <Border x:Name="PatientsPanel" Visibility="Collapsed" Background="White" CornerRadius="16" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="22">
+          <Grid>
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="14"/><RowDefinition Height="*"/><RowDefinition Height="14"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <TextBox x:Name="PatientFilter" TextChanged="PatientFilter_TextChanged" Height="44" ToolTip="ابحث بالاسم أو رقم الملف أو الهوية أو الجوال"/>
+            <DataGrid Grid.Row="2" x:Name="PatientsGrid" MouseDoubleClick="PatientsGrid_DoubleClick">
+              <DataGrid.Columns>
+                <DataGridTextColumn Header="رقم الملف" Binding="{Binding FileNumber}" Width="110"/>
+                <DataGridTextColumn Header="اسم المريض" Binding="{Binding FullName}" Width="*"/>
+                <DataGridTextColumn Header="رقم الهوية" Binding="{Binding NationalId}" Width="170"/>
+                <DataGridTextColumn Header="الجوال" Binding="{Binding Mobile}" Width="150"/>
+                <DataGridTextColumn Header="آخر تحديث" Binding="{Binding UpdatedAt, StringFormat=yyyy/MM/dd}" Width="130"/>
+              </DataGrid.Columns>
+            </DataGrid>
+            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Left" FlowDirection="LeftToRight">
+              <Button Style="{StaticResource SecondaryButton}" Margin="5" Click="EditPatient_Click" Content="تعديل المحدد"/>
+              <Button Style="{StaticResource SecondaryButton}" Margin="5" Click="DeletePatient_Click" Content="حذف آمن"/>
+            </StackPanel>
+          </Grid>
+        </Border>
+
+        <Border x:Name="AppointmentsPanel" Visibility="Collapsed" Background="White" CornerRadius="16" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="22">
+          <DataGrid x:Name="AppointmentsGrid" MouseDoubleClick="AppointmentGrid_DoubleClick">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="رقم الملف" Binding="{Binding FileNumber}" Width="120"/>
+              <DataGridTextColumn Header="اسم المريض" Binding="{Binding PatientName}" Width="*"/>
+              <DataGridTextColumn Header="التاريخ والوقت" Binding="{Binding StartsAt, StringFormat=yyyy/MM/dd  hh:mm tt}" Width="220"/>
+              <DataGridTextColumn Header="الحالة" Binding="{Binding Status}" Width="130"/>
+              <DataGridTextColumn Header="ملاحظات" Binding="{Binding Notes}" Width="280"/>
+            </DataGrid.Columns>
+          </DataGrid>
+        </Border>
+
+        <Border x:Name="SearchPanel" Visibility="Collapsed" Background="White" CornerRadius="16" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="28">
+          <StackPanel>
+            <TextBlock Text="بحث واحد في جميع سجلات المرضى" FontSize="22" FontWeight="Bold"/>
+            <TextBlock Text="اكتب الاسم أو رقم الملف أو الهوية أو الجوال" Foreground="{StaticResource MutedBrush}" Margin="0,6,0,20"/>
+            <DockPanel>
+              <Button DockPanel.Dock="Left" Style="{StaticResource PrimaryButton}" Margin="12,0,0,0" Click="RunSearch_Click" Content="بحث"/>
+              <TextBox x:Name="GlobalSearchBox" Height="46" KeyDown="GlobalSearchBox_KeyDown"/>
+            </DockPanel>
+            <DataGrid x:Name="SearchResultsGrid" Margin="0,22,0,0" Height="460" MouseDoubleClick="SearchResultsGrid_DoubleClick">
+              <DataGrid.Columns>
+                <DataGridTextColumn Header="رقم الملف" Binding="{Binding FileNumber}" Width="120"/>
+                <DataGridTextColumn Header="اسم المريض" Binding="{Binding FullName}" Width="*"/>
+                <DataGridTextColumn Header="رقم الهوية" Binding="{Binding NationalId}" Width="180"/>
+                <DataGridTextColumn Header="الجوال" Binding="{Binding Mobile}" Width="160"/>
+              </DataGrid.Columns>
+            </DataGrid>
+          </StackPanel>
+        </Border>
+      </Grid>
+    </Grid>
+  </Grid>
+</Window>

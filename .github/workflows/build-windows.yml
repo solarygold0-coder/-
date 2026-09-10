@@ -1,0 +1,40 @@
+name: Build clean Windows application
+
+on:
+  push:
+    branches: [clean-rebuild-v6]
+  workflow_dispatch:
+
+jobs:
+  verify-and-build:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Reject forbidden authentication remnants
+        shell: pwsh
+        run: |
+          $patterns = 'LoginWindow|PasswordWindow|AccountManagerWindow|UserEditorWindow|اسم مستخدم|كلمة مرور|مدير النظام'
+          $matches = Get-ChildItem src -Recurse -File | Select-String -Pattern $patterns
+          if ($matches) { $matches | Format-Table; throw 'Forbidden legacy authentication code detected.' }
+
+      - name: Restore and build
+        run: dotnet build SaudiPatientDesk.sln --configuration Release --warnaserror
+
+      - name: Publish self-contained x64
+        run: dotnet publish src/SaudiPatientDesk/SaudiPatientDesk.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true --output out/SaudiPatientDesk-win-x64
+
+      - name: Package
+        shell: pwsh
+        run: Compress-Archive -Path out/SaudiPatientDesk-win-x64/* -DestinationPath out/SaudiPatientDesk-v6.0-win-x64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SaudiPatientDesk-v6.0-win-x64
+          path: out/SaudiPatientDesk-v6.0-win-x64.zip
+          if-no-files-found: error
