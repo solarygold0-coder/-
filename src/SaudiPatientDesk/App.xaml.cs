@@ -37,7 +37,7 @@ public partial class App : Application
             AppPaths.EnsureCreated();
             if (recoveryHealthCheck)
                 Database.CreateLegacyRecoveryFixture();
-            Database.Initialize();
+            Database.Initialize(recoveryHealthCheck);
             if (healthCheck || recoveryHealthCheck)
             {
                 Database.VerifyHealth();

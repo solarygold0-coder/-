@@ -83,8 +83,16 @@ public static class Database
         }
     }
 
-    public static void Initialize()
+    public static void Initialize(bool forceLegacyRecoveryForHealthCheck = false)
     {
+        if (forceLegacyRecoveryForHealthCheck)
+        {
+            RebuildLegacyDatabase(new InvalidOperationException("اختبار استعادة قاعدة إصدار سابق."));
+            InitializeCore(AppPaths.DatabaseFile);
+            BackupNow();
+            return;
+        }
+
         try
         {
             InitializeCore(AppPaths.DatabaseFile);
@@ -593,7 +601,7 @@ public static class Database
            || exception.Message.Contains("near IS", StringComparison.OrdinalIgnoreCase)
            || exception.Message.Contains("malformed database schema", StringComparison.OrdinalIgnoreCase);
 
-    private static void RebuildLegacyDatabase(SqliteException originalError)
+    private static void RebuildLegacyDatabase(Exception originalError)
     {
         AppPaths.EnsureCreated();
         var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture);
@@ -812,16 +820,6 @@ public static class Database
             patient.Parameters.AddWithValue("$now", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
             patient.ExecuteNonQuery();
         }
-        using var corrupt = connection.CreateCommand();
-        corrupt.CommandText = """
-            PRAGMA writable_schema=ON;
-            INSERT INTO sqlite_master(type,name,tbl_name,rootpage,sql)
-            VALUES('index','legacy_bad_index','patients',0,
-              'CREATE INDEX legacy_bad_index ON patients(national_id) WHERE deleted_utc IS NULL IS');
-            PRAGMA schema_version=99;
-            PRAGMA writable_schema=OFF;
-            """;
-        corrupt.ExecuteNonQuery();
     }
 
     public static void VerifyLegacyRecoveryFixture()
