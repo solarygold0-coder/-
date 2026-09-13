@@ -44,9 +44,11 @@ jobs:
           $health = Start-Process out/SaudiPatientDesk-win-x64/SaudiPatientDesk.exe -ArgumentList '--health-check' -Wait -PassThru
           if ($health.ExitCode -ne 0) { throw "Health check failed: $($health.ExitCode)" }
           $recoveryHealth = Start-Process out/SaudiPatientDesk-win-x64/SaudiPatientDesk.exe -ArgumentList '--health-check-recovery' -Wait -PassThru
-          if ($recoveryHealth.ExitCode -ne 0) { throw "Legacy recovery health check failed: $($recoveryHealth.ExitCode)" }
-          $recoveryHealth = Start-Process out/SaudiPatientDesk-win-x64/SaudiPatientDesk.exe -ArgumentList '--health-check-recovery' -Wait -PassThru
-          if ($recoveryHealth.ExitCode -ne 0) { throw "Legacy recovery health check failed: $($recoveryHealth.ExitCode)" }
+          if ($recoveryHealth.ExitCode -ne 0) {
+            $healthError = Get-ChildItem out/smoke-localapp -Filter health-error.txt -Recurse | Select-Object -First 1
+            if ($null -ne $healthError) { Get-Content $healthError.FullName }
+            throw "Legacy recovery health check failed: $($recoveryHealth.ExitCode)"
+          }
 
           function Invoke-BoundedProcess {
             param(

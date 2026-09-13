@@ -53,6 +53,15 @@ public partial class App : Application
         {
             if (healthCheck || recoveryHealthCheck)
             {
+                try
+                {
+                    File.WriteAllText(
+                        Path.Combine(AppPaths.Root, "health-error.txt"),
+                        ex.ToString());
+                }
+                catch
+                {
+                }
                 Shutdown(-1);
                 return;
             }
