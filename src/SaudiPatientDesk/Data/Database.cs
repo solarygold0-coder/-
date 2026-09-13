@@ -20,7 +20,8 @@ public static class Database
             DataSource = databaseFile,
             Mode = mode,
             Cache = SqliteCacheMode.Shared,
-            ForeignKeys = foreignKeys
+            ForeignKeys = foreignKeys,
+            Pooling = false
         }.ToString());
         connection.Open();
         using var command = connection.CreateCommand();
