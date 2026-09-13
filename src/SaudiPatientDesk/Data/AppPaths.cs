@@ -5,9 +5,7 @@ namespace SaudiPatientDesk.Data;
 public static class AppPaths
 {
     // مسار جديد. لا يقرأ Generation6 ولا أي قاعدة تالفة سابقة.
-    public static string Root { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "SaudiPatientDesk", "Clinic2026");
+    public static string Root { get; } = ResolveRoot();
 
     public static string DatabaseFile => Path.Combine(Root, "clinic-records.sqlite3");
     public static string Attachments => Path.Combine(Root, "Attachments");
@@ -19,5 +17,16 @@ public static class AppPaths
         Directory.CreateDirectory(Root);
         Directory.CreateDirectory(Attachments);
         Directory.CreateDirectory(Backups);
+    }
+
+    private static string ResolveRoot()
+    {
+        var testRoot = Environment.GetEnvironmentVariable("SAUDI_PATIENT_DESK_DATA_ROOT");
+        if (!string.IsNullOrWhiteSpace(testRoot))
+            return Path.GetFullPath(testRoot);
+
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "SaudiPatientDesk", "Clinic2026");
     }
 }

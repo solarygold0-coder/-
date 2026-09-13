@@ -41,6 +41,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force -Path out/smoke-localapp | Out-Null
           $env:LOCALAPPDATA = (Resolve-Path out/smoke-localapp).Path
+          $env:SAUDI_PATIENT_DESK_DATA_ROOT = (Resolve-Path out/smoke-localapp).Path
           $health = Start-Process out/SaudiPatientDesk-win-x64/SaudiPatientDesk.exe -ArgumentList '--health-check' -Wait -PassThru
           if ($health.ExitCode -ne 0) { throw "Health check failed: $($health.ExitCode)" }
           $recoveryHealth = Start-Process out/SaudiPatientDesk-win-x64/SaudiPatientDesk.exe -ArgumentList '--health-check-recovery' -Wait -PassThru
