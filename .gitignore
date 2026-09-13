@@ -1,0 +1,8 @@
+# Code-signing secrets
+certs/
+*.pfx
+
+# Build output
+out/
+bin/
+obj/

@@ -1,0 +1,48 @@
+name: Build clean Windows application
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verify-and-build:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Reject forbidden authentication remnants
+        shell: pwsh
+        run: |
+          $patterns = 'LoginWindow|PasswordWindow|AccountManagerWindow|UserEditorWindow|اسم مستخدم|كلمة مرور|مدير النظام'
+          $matches = Get-ChildItem src -Recurse -File | Select-String -Pattern $patterns
+          if ($matches) { $matches | Format-Table; throw 'Forbidden legacy authentication code detected.' }
+
+      - name: Restore and build
+        run: dotnet build SaudiPatientDesk.sln --configuration Release --warnaserror
+
+      - name: Publish self-contained x64
+        run: dotnet publish src/SaudiPatientDesk/SaudiPatientDesk.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false --output out/SaudiPatientDesk-win-x64
+
+      - name: First-start database health check
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out/smoke-localapp | Out-Null
+          $env:LOCALAPPDATA = (Resolve-Path out/smoke-localapp).Path
+          $process = Start-Process out/SaudiPatientDesk-win-x64/SaudiPatientDesk.exe -ArgumentList '--health-check' -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Health check failed: $($process.ExitCode)" }
+
+      - name: Package
+        shell: pwsh
+        run: Compress-Archive -Path out/SaudiPatientDesk-win-x64/* -DestinationPath out/SaudiPatientDesk-v7.0.9-win-x64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SaudiPatientDesk-v7.0.9-win-x64
+          path: out/SaudiPatientDesk-v7.0.9-win-x64.zip
+          if-no-files-found: error

@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>SaudiPatientDesk</AssemblyName>
+    <RootNamespace>SaudiPatientDesk</RootNamespace>
+    <Product>نظام سجلات المرضى السعودي</Product>
+    <Company>Saudi Patient Desk</Company>
+    <Version>7.0.9</Version>
+    <AssemblyVersion>7.0.9.0</AssemblyVersion>
+    <FileVersion>7.0.9.0</FileVersion>
+    <!-- Keep the Windows exe icon here. Clinic logo is a separate runtime file and must NOT replace this. -->
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="Assets\AppIcon.ico" />
+    <Resource Include="Assets\AppIcon.ico" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
+    <!-- Override the vulnerable native SQLite asset pulled transitively by the provider. -->
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
+  </ItemGroup>
+</Project>

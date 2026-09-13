@@ -1,0 +1,211 @@
+name: Build and self-sign Windows application
+# Produces the icon-enabled clinic package and its public trust certificate.
+# Application icon asset: Windows-compatible ICO with 128 64 48 32 and 16 pixel frames.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/build-self-signed-windows.yml
+      - src/**
+      - scripts/**
+
+jobs:
+  build-sign-verify:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build and publish
+        shell: pwsh
+        run: |
+          dotnet build SaudiPatientDesk.sln --configuration Release --warnaserror
+          dotnet publish src/SaudiPatientDesk/SaudiPatientDesk.csproj `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:DebugType=None `
+            -p:DebugSymbols=false `
+            --output out/SaudiPatientDesk-win-x64
+
+      - name: Create certificate sign and verify
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path out/smoke-localapp | Out-Null
+          $env:LOCALAPPDATA = (Resolve-Path out/smoke-localapp).Path
+          $health = Start-Process out/SaudiPatientDesk-win-x64/SaudiPatientDesk.exe -ArgumentList '--health-check' -Wait -PassThru
+          if ($health.ExitCode -ne 0) { throw "Health check failed: $($health.ExitCode)" }
+
+          function Invoke-BoundedProcess {
+            param(
+              [Parameter(Mandatory)] [string] $FilePath,
+              [Parameter(Mandatory)] [string[]] $Arguments,
+              [Parameter(Mandatory)] [int] $TimeoutSeconds
+            )
+
+            $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+            $startInfo.FileName = $FilePath
+            $startInfo.UseShellExecute = $false
+            $startInfo.CreateNoWindow = $true
+            $startInfo.RedirectStandardOutput = $true
+            $startInfo.RedirectStandardError = $true
+            foreach ($argument in $Arguments) {
+              [void] $startInfo.ArgumentList.Add($argument)
+            }
+
+            $process = [System.Diagnostics.Process]::new()
+            $process.StartInfo = $startInfo
+            if (-not $process.Start()) { throw "Failed to start: $FilePath" }
+            $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+            $stderrTask = $process.StandardError.ReadToEndAsync()
+
+            $timedOut = -not $process.WaitForExit($TimeoutSeconds * 1000)
+            if ($timedOut) {
+              try { $process.Kill($true) } catch { Write-Warning $_ }
+              [void] $process.WaitForExit(5000)
+            }
+
+            $output = ''
+            if ($process.HasExited) {
+              $output = (
+                $stdoutTask.GetAwaiter().GetResult() +
+                [Environment]::NewLine +
+                $stderrTask.GetAwaiter().GetResult()
+              ).Trim()
+            }
+            $result = [pscustomobject]@{
+              TimedOut = $timedOut
+              ExitCode = if ($process.HasExited) { $process.ExitCode } else { -1 }
+              Output = $output
+            }
+            $process.Dispose()
+            $result
+          }
+
+          $signTool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" `
+            -Filter signtool.exe -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if ($null -eq $signTool) { throw 'signtool.exe was not found.' }
+
+          $certificate = New-SelfSignedCertificate `
+            -Type Custom `
+            -Subject 'CN=Saudi Patient Desk' `
+            -FriendlyName 'Saudi Patient Desk Code Signing 7.0.9' `
+            -CertStoreLocation 'Cert:\CurrentUser\My' `
+            -KeyAlgorithm RSA `
+            -KeyLength 3072 `
+            -HashAlgorithm SHA256 `
+            -KeyExportPolicy NonExportable `
+            -KeyUsage DigitalSignature `
+            -NotBefore (Get-Date).AddMinutes(-10) `
+            -NotAfter (Get-Date).AddYears(5) `
+            -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3')
+
+          $cerPath = Join-Path $PWD 'out\SaudiPatientDesk-win-x64\SaudiPatientDesk.cer'
+          $infoPath = Join-Path $PWD 'out\SaudiPatientDesk-win-x64\certificate-info.txt'
+          $executable = Join-Path $PWD 'out\SaudiPatientDesk-win-x64\SaudiPatientDesk.exe'
+          Export-Certificate -Cert $certificate -FilePath $cerPath -Type CERT | Out-Null
+
+          try {
+            $signed = $false
+            # Microsoft documents this RFC 3161 endpoint over HTTP. The TSA
+            # response itself is signed and is verified below by signtool.
+            $timestampServers = @(
+              'http://timestamp.acs.microsoft.com/',
+              'http://timestamp.digicert.com'
+            )
+            foreach ($timestampServer in $timestampServers) {
+              $signArguments = @(
+                'sign', '/sha1', $certificate.Thumbprint, '/s', 'My',
+                '/fd', 'SHA256', '/td', 'SHA256', '/tr', $timestampServer,
+                '/v', $executable
+              )
+              $signResult = Invoke-BoundedProcess `
+                -FilePath $signTool.FullName `
+                -Arguments $signArguments `
+                -TimeoutSeconds 75
+              if ($signResult.Output) { Write-Host $signResult.Output }
+              if ($signResult.TimedOut) {
+                Write-Warning "Timestamp server timed out: $timestampServer"
+                continue
+              }
+              if ($signResult.ExitCode -eq 0) {
+                $signed = $true
+                break
+              }
+              Write-Warning "Signing failed through timestamp server: $timestampServer"
+            }
+            if (-not $signed) { throw 'Authenticode signing failed through all timestamp servers.' }
+
+            $verifyArguments = @('verify', '/pa', '/all', '/v', $executable)
+            $verifyResult = Invoke-BoundedProcess `
+              -FilePath $signTool.FullName `
+              -Arguments $verifyArguments `
+              -TimeoutSeconds 45
+            if ($verifyResult.Output) { Write-Host $verifyResult.Output }
+            if ($verifyResult.TimedOut) {
+              throw 'Independent signtool verification timed out.'
+            }
+            $expectedSelfSignedResult =
+              $verifyResult.ExitCode -eq 1 -and
+              $verifyResult.Output -match '(?s)root\s+certificate which is not trusted by the trust provider' -and
+              $verifyResult.Output -match 'Hash of file \(sha256\):' -and
+              $verifyResult.Output -match 'The signature is timestamped:' -and
+              $verifyResult.Output -match 'Timestamp Verified by:'
+            if ($verifyResult.ExitCode -ne 0 -and -not $expectedSelfSignedResult) {
+              throw 'Independent signtool verification failed unexpectedly.'
+            }
+
+            $signature = Get-AuthenticodeSignature -FilePath $executable
+            $selfSignedStatus =
+              $signature.Status.ToString() -in @('NotTrusted', 'UnknownError') -and
+              $signature.StatusMessage -match '(?s)root certificate which is not\s+trusted by the trust provider'
+            $signatureIntegrityOk =
+              $signature.Status.ToString() -eq 'Valid' -or
+              ($expectedSelfSignedResult -and $selfSignedStatus)
+            if (-not $signatureIntegrityOk -or
+                $signature.SignerCertificate.Thumbprint -ne $certificate.Thumbprint -or
+                $null -eq $signature.TimeStamperCertificate) {
+              throw "Signature validation failed: $($signature.StatusMessage)"
+            }
+            Write-Host "Authenticode integrity and timestamp verified: $($signature.Status)"
+
+            @(
+              "Subject: $($certificate.Subject)"
+              "Thumbprint: $($certificate.Thumbprint)"
+              "SerialNumber: $($certificate.SerialNumber)"
+              "NotBefore: $($certificate.NotBefore.ToString('O'))"
+              "NotAfter: $($certificate.NotAfter.ToString('O'))"
+              'DigestAlgorithm: SHA256'
+              'EnhancedKeyUsage: Code Signing (1.3.6.1.5.5.7.3.3)'
+              "TimestampSubject: $($signature.TimeStamperCertificate.Subject)"
+              "SignedCommit: $env:GITHUB_SHA"
+            ) | Set-Content -Path $infoPath -Encoding UTF8
+          }
+          finally {
+            Remove-Item "Cert:\CurrentUser\My\$($certificate.Thumbprint)" -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Package signed release
+        shell: pwsh
+        run: |
+          Copy-Item scripts/03-install-certificate.ps1 out/SaudiPatientDesk-win-x64/ -Force
+          Copy-Item scripts/README-SIGNING_AR.md out/SaudiPatientDesk-win-x64/ -Force
+          Compress-Archive -Path out/SaudiPatientDesk-win-x64/* `
+            -DestinationPath out/SaudiPatientDesk-v7.0.9-win-x64-self-signed.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SaudiPatientDesk-v7.0.9-win-x64-self-signed
+          path: out/SaudiPatientDesk-v7.0.9-win-x64-self-signed.zip
+          if-no-files-found: error
