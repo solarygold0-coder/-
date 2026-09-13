@@ -37,6 +37,12 @@ public static class Database
             SELECT 1, strftime('%Y-%m-%dT%H:%M:%fZ','now')
             WHERE NOT EXISTS (SELECT 1 FROM schema_info);
 
+            CREATE TABLE IF NOT EXISTS app_settings (
+                setting_key TEXT PRIMARY KEY,
+                setting_value TEXT NOT NULL,
+                updated_utc TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS patients (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 file_number INTEGER NOT NULL UNIQUE CHECK(file_number > 0),

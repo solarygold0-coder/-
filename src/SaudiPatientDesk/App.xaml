@@ -60,6 +60,8 @@
       <Setter Property="Background" Value="White"/>
       <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
       <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="FlowDirection" Value="RightToLeft"/>
+      <Setter Property="TextAlignment" Value="Right"/>
     </Style>
     <Style TargetType="ComboBox">
       <Setter Property="Padding" Value="10,8"/>
@@ -77,6 +79,13 @@
       <Setter Property="FontSize" Value="14"/>
       <Setter Property="SelectionMode" Value="Single"/>
       <Setter Property="SelectionUnit" Value="FullRow"/>
+      <Setter Property="FlowDirection" Value="RightToLeft"/>
+    </Style>
+    <Style TargetType="DataGridCell">
+      <Setter Property="TextBlock.TextAlignment" Value="Right"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="Padding" Value="8,0"/>
+      <Setter Property="BorderThickness" Value="0"/>
     </Style>
     <Style x:Key="MetricCard" TargetType="Border">
       <Setter Property="Background" Value="White"/>
