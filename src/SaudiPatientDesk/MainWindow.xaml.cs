@@ -14,6 +14,8 @@ public partial class MainWindow : Window
     private readonly SettingsService _settings = new();
     private readonly AppointmentPrintService _printer = new();
     private Patient? _editingPatient;
+    private Appointment? _editingAppointment;
+    private bool _initializingAppointmentDate;
 
     public MainWindow()
     {
@@ -25,19 +27,36 @@ public partial class MainWindow : Window
         RefreshAll();
     }
 
-    private void InitializeAppointmentSelectors()
+    private void InitializeAppointmentSelectors(DateTime? selected = null)
     {
-        var tomorrow = DateTime.Today.AddDays(1);
-        AppointmentDayBox.ItemsSource = Enumerable.Range(1, 31);
+        _initializingAppointmentDate = true;
+        var value = selected ?? DateTime.Today.AddDays(1).AddHours(9);
+        var firstYear = Math.Min(DateTime.Today.Year, value.Year);
         AppointmentMonthBox.ItemsSource = Enumerable.Range(1, 12);
-        AppointmentYearBox.ItemsSource = Enumerable.Range(DateTime.Today.Year, 21);
+        AppointmentYearBox.ItemsSource = Enumerable.Range(firstYear, 21);
         AppointmentHourBox.ItemsSource = Enumerable.Range(0, 24).Select(x => x.ToString("00"));
         AppointmentMinuteBox.ItemsSource = Enumerable.Range(0, 60).Select(x => x.ToString("00"));
-        AppointmentDayBox.SelectedItem = tomorrow.Day;
-        AppointmentMonthBox.SelectedItem = tomorrow.Month;
-        AppointmentYearBox.SelectedItem = tomorrow.Year;
-        AppointmentHourBox.SelectedItem = "09";
-        AppointmentMinuteBox.SelectedItem = "00";
+        AppointmentMonthBox.SelectedItem = value.Month;
+        AppointmentYearBox.SelectedItem = value.Year;
+        UpdateAppointmentDays(value.Day);
+        AppointmentHourBox.SelectedItem = value.Hour.ToString("00");
+        AppointmentMinuteBox.SelectedItem = value.Minute.ToString("00");
+        _initializingAppointmentDate = false;
+    }
+
+    private void AppointmentDatePart_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_initializingAppointmentDate) UpdateAppointmentDays();
+    }
+
+    private void UpdateAppointmentDays(int? preferredDay = null)
+    {
+        if (AppointmentYearBox.SelectedItem is not int year || AppointmentMonthBox.SelectedItem is not int month)
+            return;
+        var day = preferredDay ?? (AppointmentDayBox.SelectedItem as int? ?? 1);
+        var count = DateTime.DaysInMonth(year, month);
+        AppointmentDayBox.ItemsSource = Enumerable.Range(1, count);
+        AppointmentDayBox.SelectedItem = Math.Min(day, count);
     }
 
     private void RefreshAll()
@@ -47,9 +66,8 @@ public partial class MainWindow : Window
         TodayCount.Text = snapshot.TodayAppointments.ToString("N0");
         AlertsCount.Text = snapshot.UpcomingAlerts.ToString("N0");
         InactiveCount.Text = snapshot.InactiveTenYears.ToString("N0");
-        var upcoming = _appointments.Upcoming();
-        DashboardAppointmentsGrid.ItemsSource = upcoming;
-        AppointmentsGrid.ItemsSource = upcoming;
+        DashboardAppointmentsGrid.ItemsSource = _appointments.Upcoming();
+        AppointmentsGrid.ItemsSource = _appointments.Upcoming(365 * 21, false, 10000);
         PatientsGrid.ItemsSource = _patients.Search(PatientFilter.Text);
     }
 
@@ -93,12 +111,56 @@ public partial class MainWindow : Window
 
     private void AddAppointment_Click(object sender, RoutedEventArgs e)
     {
+        _editingAppointment = null;
+        AppointmentFormTitle.Text = "إضافة موعد";
+        AppointmentFormSubtitle.Text = "أدخل رقم الملف وستظهر بيانات المراجع كاملة";
+        SaveAppointmentButton.Content = "حفظ الموعد";
         AppointmentFileNumberBox.Clear();
         AppointmentNotesBox.Clear();
         InitializeAppointmentSelectors();
         ClearAppointmentPatientCard("لم يتم اختيار مراجع");
         AppointmentFormOverlay.Visibility = Visibility.Visible;
         AppointmentFileNumberBox.Focus();
+    }
+
+    private void EditAppointment_Click(object sender, RoutedEventArgs e) =>
+        EditSelectedAppointment(AppointmentsGrid.SelectedItem as Appointment);
+
+    private void EditSelectedAppointment(Appointment? appointment)
+    {
+        if (appointment is null)
+        {
+            MessageBox.Show("حدد موعداً من الجدول أولاً.", "تعديل الموعد", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        _editingAppointment = appointment;
+        AppointmentFormTitle.Text = "تعديل الموعد";
+        AppointmentFormSubtitle.Text = $"رقم الموعد: {appointment.Id} • التاريخ ميلادي";
+        SaveAppointmentButton.Content = "حفظ التعديلات";
+        AppointmentFileNumberBox.Text = appointment.FileNumber.ToString();
+        AppointmentNotesBox.Text = appointment.Notes;
+        InitializeAppointmentSelectors(appointment.StartsAt);
+        AppointmentFormOverlay.Visibility = Visibility.Visible;
+        AppointmentFileNumberBox.Focus();
+    }
+
+    private void CancelAppointment_Click(object sender, RoutedEventArgs e)
+    {
+        if (AppointmentsGrid.SelectedItem is not Appointment appointment)
+        {
+            MessageBox.Show("حدد موعداً من الجدول أولاً.", "إلغاء الموعد", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        if (appointment.Status == "cancelled")
+        {
+            MessageBox.Show("هذا الموعد ملغي مسبقاً.", "إلغاء الموعد", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        if (MessageBox.Show($"هل تريد إلغاء موعد {appointment.PatientName}؟\nسيبقى الموعد محفوظاً في السجل.",
+            "تأكيد إلغاء الموعد", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        _appointments.Cancel(appointment.Id);
+        RefreshAll();
     }
 
     private void Refresh_Click(object sender, RoutedEventArgs e) => RefreshAll();
@@ -145,12 +207,12 @@ public partial class MainWindow : Window
     private void AppointmentGrid_DoubleClick(object sender, MouseButtonEventArgs e)
     {
         if ((sender as DataGrid)?.SelectedItem is Appointment item)
-            PrintAppointment(item);
+            EditSelectedAppointment(item);
     }
 
     private void PrintSelectedAppointment_DoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if ((sender as DataGrid)?.SelectedItem is Appointment item) PrintAppointment(item);
+        if ((sender as DataGrid)?.SelectedItem is Appointment item) EditSelectedAppointment(item);
     }
 
     private void PrintSelectedAppointment_Click(object sender, RoutedEventArgs e)
@@ -218,8 +280,11 @@ public partial class MainWindow : Window
             AppointmentDayBox.SelectedItem is not int day || AppointmentHourBox.SelectedItem is not string hourText ||
             AppointmentMinuteBox.SelectedItem is not string minuteText)
             throw new InvalidOperationException("اختر التاريخ والوقت كاملاً.");
-        var startsAt = new DateTime(year, month, day, int.Parse(hourText), int.Parse(minuteText), 0);
-        return _appointments.Add(fileNumber, startsAt, AppointmentNotesBox.Text);
+        var startsAt = new DateTime(year, month, day, int.Parse(hourText), int.Parse(minuteText), 0,
+            new System.Globalization.GregorianCalendar());
+        return _editingAppointment is null
+            ? _appointments.Add(fileNumber, startsAt, AppointmentNotesBox.Text)
+            : _appointments.Update(_editingAppointment.Id, fileNumber, startsAt, AppointmentNotesBox.Text);
     }
 
     private void SaveAppointmentInline_Click(object sender, RoutedEventArgs e) => SaveAppointmentInline(false);
@@ -229,11 +294,14 @@ public partial class MainWindow : Window
     {
         try
         {
+            var wasEditing = _editingAppointment is not null;
             var appointment = SaveAppointmentFromForm();
             AppointmentFormOverlay.Visibility = Visibility.Collapsed;
             RefreshAll();
             if (print) PrintAppointment(appointment);
-            else MessageBox.Show("تم حفظ الموعد بنجاح.", "تم الحفظ", MessageBoxButton.OK, MessageBoxImage.Information);
+            else MessageBox.Show(wasEditing ? "تم تعديل الموعد بنجاح." : "تم حفظ الموعد بنجاح.",
+                "تم الحفظ", MessageBoxButton.OK, MessageBoxImage.Information);
+            _editingAppointment = null;
         }
         catch (Exception ex)
         {

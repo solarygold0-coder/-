@@ -9,7 +9,7 @@
     <RootNamespace>SaudiPatientDesk</RootNamespace>
     <Product>نظام سجلات المرضى السعودي</Product>
     <Company>Saudi Patient Desk</Company>
-    <Version>6.1.0</Version>
+    <Version>6.2.0</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>

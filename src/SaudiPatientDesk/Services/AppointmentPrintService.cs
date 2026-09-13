@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
+using System.Globalization;
 using SaudiPatientDesk.Domain;
 
 namespace SaudiPatientDesk.Services;
@@ -49,12 +50,13 @@ public sealed class AppointmentPrintService
         AddRow(group, "رقم الملف", patient.FileNumber.ToString());
         AddRow(group, "رقم الهوية", patient.NationalId);
         AddRow(group, "رقم الجوال", patient.Mobile);
-        AddRow(group, "تاريخ الموعد", appointment.StartsAt.ToString("yyyy/MM/dd"));
-        AddRow(group, "وقت الموعد", appointment.StartsAt.ToString("HH:mm"));
+        AddRow(group, "تاريخ الموعد", appointment.StartsAt.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture));
+        AddRow(group, "وقت الموعد", appointment.StartsAt.ToString("HH:mm", CultureInfo.InvariantCulture));
         AddRow(group, "ملاحظات", string.IsNullOrWhiteSpace(appointment.Notes) ? "لا توجد" : appointment.Notes);
         document.Blocks.Add(table);
 
-        document.Blocks.Add(new Paragraph(new Run($"تاريخ الطباعة: {DateTime.Now:yyyy/MM/dd HH:mm}"))
+        document.Blocks.Add(new Paragraph(new Run("تاريخ الطباعة: " +
+            DateTime.Now.ToString("yyyy/MM/dd HH:mm", CultureInfo.InvariantCulture)))
         {
             FontSize = 11,
             Foreground = Brushes.DimGray,

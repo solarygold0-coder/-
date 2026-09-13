@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace SaudiPatientDesk.Domain;
 
 public sealed record Patient(
@@ -9,7 +11,10 @@ public sealed record Patient(
     string? SecondaryContact,
     string? BriefMedicalInfo,
     DateTime CreatedAt,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt)
+{
+    public string UpdatedAtDisplay => UpdatedAt.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture);
+}
 
 public sealed record PatientDraft(
     string FullName,
@@ -25,7 +30,19 @@ public sealed record Appointment(
     string PatientName,
     DateTime StartsAt,
     string Status,
-    string? Notes);
+    string? Notes)
+{
+    public string StartsAtDisplay => StartsAt.ToString("yyyy/MM/dd  HH:mm", CultureInfo.InvariantCulture);
+
+    public string StatusDisplay => Status switch
+    {
+        "scheduled" => "مجدول",
+        "completed" => "مكتمل",
+        "cancelled" => "ملغي",
+        "missed" => "لم يحضر",
+        _ => Status
+    };
+}
 
 public sealed record DashboardSnapshot(
     int ActivePatients,

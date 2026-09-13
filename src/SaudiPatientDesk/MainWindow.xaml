@@ -34,7 +34,7 @@
         <Border Grid.Row="3" Background="#173C5E" CornerRadius="12" Padding="14">
           <StackPanel>
             <TextBlock Text="الإصدار الجديد المستقل" Foreground="White" FontWeight="SemiBold"/>
-            <TextBlock Text="6.0 • قاعدة بيانات منفصلة" Foreground="#AFC4D6" FontSize="12" Margin="0,4,0,0"/>
+            <TextBlock Text="6.2 • ميلادي فقط" Foreground="#AFC4D6" FontSize="12" Margin="0,4,0,0"/>
           </StackPanel>
         </Border>
       </Grid>
@@ -85,7 +85,7 @@
                 <DataGrid.Columns>
                   <DataGridTextColumn Header="رقم الملف" Binding="{Binding FileNumber}" Width="120"/>
                   <DataGridTextColumn Header="اسم المريض" Binding="{Binding PatientName}" Width="*"/>
-                  <DataGridTextColumn Header="التاريخ والوقت" Binding="{Binding StartsAt, StringFormat=yyyy/MM/dd  hh:mm tt}" Width="220"/>
+                  <DataGridTextColumn Header="التاريخ والوقت" Binding="{Binding StartsAtDisplay}" Width="220"/>
                   <DataGridTextColumn Header="ملاحظات" Binding="{Binding Notes}" Width="280"/>
                 </DataGrid.Columns>
               </DataGrid>
@@ -103,7 +103,7 @@
                 <DataGridTextColumn Header="اسم المريض" Binding="{Binding FullName}" Width="*"/>
                 <DataGridTextColumn Header="رقم الهوية" Binding="{Binding NationalId}" Width="170"/>
                 <DataGridTextColumn Header="الجوال" Binding="{Binding Mobile}" Width="150"/>
-                <DataGridTextColumn Header="آخر تحديث" Binding="{Binding UpdatedAt, StringFormat=yyyy/MM/dd}" Width="130"/>
+                <DataGridTextColumn Header="آخر تحديث" Binding="{Binding UpdatedAtDisplay}" Width="130"/>
               </DataGrid.Columns>
             </DataGrid>
             <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Left" FlowDirection="LeftToRight">
@@ -118,14 +118,16 @@
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="14"/><RowDefinition Height="*"/></Grid.RowDefinitions>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
               <Button Style="{StaticResource PrimaryButton}" Margin="0,0,0,0" Click="AddAppointment_Click" Content="＋ إضافة موعد"/>
+              <Button Style="{StaticResource SecondaryButton}" Margin="10,0,0,0" Click="EditAppointment_Click" Content="تعديل الموعد"/>
+              <Button Style="{StaticResource SecondaryButton}" Margin="10,0,0,0" Click="CancelAppointment_Click" Content="إلغاء الموعد"/>
               <Button Style="{StaticResource SecondaryButton}" Margin="10,0,0,0" Click="PrintSelectedAppointment_Click" Content="🖨 طباعة الموعد المحدد"/>
             </StackPanel>
             <DataGrid Grid.Row="2" x:Name="AppointmentsGrid" MouseDoubleClick="PrintSelectedAppointment_DoubleClick">
               <DataGrid.Columns>
                 <DataGridTextColumn Header="رقم الملف" Binding="{Binding FileNumber}" Width="120"/>
                 <DataGridTextColumn Header="اسم المريض" Binding="{Binding PatientName}" Width="*"/>
-                <DataGridTextColumn Header="التاريخ والوقت" Binding="{Binding StartsAt, StringFormat=yyyy/MM/dd  HH:mm}" Width="220"/>
-                <DataGridTextColumn Header="الحالة" Binding="{Binding Status}" Width="130"/>
+                <DataGridTextColumn Header="التاريخ والوقت" Binding="{Binding StartsAtDisplay}" Width="220"/>
+                <DataGridTextColumn Header="الحالة" Binding="{Binding StatusDisplay}" Width="130"/>
                 <DataGridTextColumn Header="ملاحظات" Binding="{Binding Notes}" Width="280"/>
               </DataGrid.Columns>
             </DataGrid>
@@ -209,7 +211,7 @@
       <Border Width="760" MaxHeight="830" Background="White" CornerRadius="20" Padding="30" HorizontalAlignment="Center" VerticalAlignment="Center">
         <Grid>
           <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="16"/><RowDefinition Height="*"/><RowDefinition Height="16"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-          <StackPanel><TextBlock Text="إضافة موعد" FontSize="27" FontWeight="Bold"/><TextBlock Text="أدخل رقم الملف وستظهر بيانات المراجع كاملة" Foreground="{StaticResource MutedBrush}" Margin="0,5,0,0"/></StackPanel>
+          <StackPanel><TextBlock x:Name="AppointmentFormTitle" Text="إضافة موعد" FontSize="27" FontWeight="Bold"/><TextBlock x:Name="AppointmentFormSubtitle" Text="أدخل رقم الملف وستظهر بيانات المراجع كاملة" Foreground="{StaticResource MutedBrush}" Margin="0,5,0,0"/></StackPanel>
           <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
             <StackPanel>
               <TextBlock Text="رقم الملف" Margin="0,0,0,6"/><TextBox x:Name="AppointmentFileNumberBox" MaxLength="8" TextChanged="AppointmentFileNumberBox_TextChanged" PreviewTextInput="DigitsOnly_PreviewTextInput"/>
@@ -227,8 +229,8 @@
               <TextBlock Text="التاريخ الميلادي" Margin="0,0,0,6"/>
               <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
                 <ComboBox x:Name="AppointmentDayBox" Grid.Column="0" Margin="4"/>
-                <ComboBox x:Name="AppointmentMonthBox" Grid.Column="1" Margin="4"/>
-                <ComboBox x:Name="AppointmentYearBox" Grid.Column="2" Margin="4"/>
+                <ComboBox x:Name="AppointmentMonthBox" Grid.Column="1" Margin="4" SelectionChanged="AppointmentDatePart_SelectionChanged"/>
+                <ComboBox x:Name="AppointmentYearBox" Grid.Column="2" Margin="4" SelectionChanged="AppointmentDatePart_SelectionChanged"/>
               </Grid>
               <TextBlock Text="الوقت بنظام 24 ساعة" Margin="0,15,0,6"/>
               <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
@@ -240,7 +242,7 @@
           </ScrollViewer>
           <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Left" FlowDirection="LeftToRight">
             <Button Style="{StaticResource SecondaryButton}" Margin="6" Click="CloseInlineForm_Click" Content="إلغاء"/>
-            <Button Style="{StaticResource PrimaryButton}" Margin="6" Click="SaveAppointmentInline_Click" Content="حفظ الموعد"/>
+            <Button x:Name="SaveAppointmentButton" Style="{StaticResource PrimaryButton}" Margin="6" Click="SaveAppointmentInline_Click" Content="حفظ الموعد"/>
             <Button Style="{StaticResource PrimaryButton}" Margin="6" Click="SaveAndPrintAppointmentInline_Click" Content="حفظ وطباعة"/>
           </StackPanel>
         </Grid>

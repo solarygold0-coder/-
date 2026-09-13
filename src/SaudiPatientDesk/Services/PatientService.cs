@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using System.Globalization;
 using SaudiPatientDesk.Data;
 using SaudiPatientDesk.Domain;
 
@@ -65,7 +66,7 @@ public sealed class PatientService
         command.Parameters.AddWithValue("$file", nextNumber);
         BindDraft(command, draft);
         command.Parameters.AddWithValue("$now", now);
-        var id = (long)(command.ExecuteScalar() ?? 0L);
+        command.ExecuteScalar();
         transaction.Commit();
         return FindByFileNumber(nextNumber) ?? throw new InvalidOperationException("تعذر قراءة السجل بعد حفظه.");
     }
@@ -141,5 +142,6 @@ public sealed class PatientService
     private static Patient ReadPatient(SqliteDataReader reader) => new(
         reader.GetInt64(0), reader.GetInt32(1), reader.GetString(2), reader.GetString(3), reader.GetString(4),
         reader.IsDBNull(5) ? null : reader.GetString(5), reader.IsDBNull(6) ? null : reader.GetString(6),
-        DateTime.Parse(reader.GetString(7)), DateTime.Parse(reader.GetString(8)));
+        DateTime.Parse(reader.GetString(7), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+        DateTime.Parse(reader.GetString(8), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
 }

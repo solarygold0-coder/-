@@ -8,9 +8,15 @@ public partial class App : Application
 {
     protected override void OnStartup(StartupEventArgs e)
     {
-        var culture = CultureInfo.GetCultureInfo("ar-SA");
+        // واجهة عربية مع تقويم ميلادي حصراً. لا نستخدم تقويم أم القرى ضمنياً.
+        var culture = (CultureInfo)CultureInfo.GetCultureInfo("ar-SA").Clone();
+        culture.DateTimeFormat.Calendar = new GregorianCalendar(GregorianCalendarTypes.Localized);
+        culture.DateTimeFormat.ShortDatePattern = "yyyy/MM/dd";
+        culture.DateTimeFormat.LongDatePattern = "yyyy/MM/dd";
         CultureInfo.DefaultThreadCurrentCulture = culture;
         CultureInfo.DefaultThreadCurrentUICulture = culture;
+        CultureInfo.CurrentCulture = culture;
+        CultureInfo.CurrentUICulture = culture;
 
         DispatcherUnhandledException += (_, args) =>
         {
