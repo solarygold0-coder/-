@@ -43,6 +43,10 @@ jobs:
           $env:LOCALAPPDATA = (Resolve-Path out/smoke-localapp).Path
           $health = Start-Process out/SaudiPatientDesk-win-x64/SaudiPatientDesk.exe -ArgumentList '--health-check' -Wait -PassThru
           if ($health.ExitCode -ne 0) { throw "Health check failed: $($health.ExitCode)" }
+          $recoveryHealth = Start-Process out/SaudiPatientDesk-win-x64/SaudiPatientDesk.exe -ArgumentList '--health-check-recovery' -Wait -PassThru
+          if ($recoveryHealth.ExitCode -ne 0) { throw "Legacy recovery health check failed: $($recoveryHealth.ExitCode)" }
+          $recoveryHealth = Start-Process out/SaudiPatientDesk-win-x64/SaudiPatientDesk.exe -ArgumentList '--health-check-recovery' -Wait -PassThru
+          if ($recoveryHealth.ExitCode -ne 0) { throw "Legacy recovery health check failed: $($recoveryHealth.ExitCode)" }
 
           function Invoke-BoundedProcess {
             param(
@@ -100,7 +104,7 @@ jobs:
           $certificate = New-SelfSignedCertificate `
             -Type Custom `
             -Subject 'CN=Saudi Patient Desk' `
-            -FriendlyName 'Saudi Patient Desk Code Signing 7.0.9' `
+            -FriendlyName 'Saudi Patient Desk Code Signing 7.0.10' `
             -CertStoreLocation 'Cert:\CurrentUser\My' `
             -KeyAlgorithm RSA `
             -KeyLength 3072 `
@@ -202,10 +206,10 @@ jobs:
           Copy-Item scripts/03-install-certificate.ps1 out/SaudiPatientDesk-win-x64/ -Force
           Copy-Item scripts/README-SIGNING_AR.md out/SaudiPatientDesk-win-x64/ -Force
           Compress-Archive -Path out/SaudiPatientDesk-win-x64/* `
-            -DestinationPath out/SaudiPatientDesk-v7.0.9-win-x64-self-signed.zip
+            -DestinationPath out/SaudiPatientDesk-v7.0.10-win-x64-self-signed.zip
 
       - uses: actions/upload-artifact@v4
         with:
-          name: SaudiPatientDesk-v7.0.9-win-x64-self-signed
-          path: out/SaudiPatientDesk-v7.0.9-win-x64-self-signed.zip
+          name: SaudiPatientDesk-v7.0.10-win-x64-self-signed
+          path: out/SaudiPatientDesk-v7.0.10-win-x64-self-signed.zip
           if-no-files-found: error

@@ -151,7 +151,7 @@ Write-Host "Thumbprint : $($sig.SignerCertificate.Thumbprint)"
 Write-Host ""
 
 # Zip for distribution
-$zipPath = Join-Path $RepoRoot "out\SaudiPatientDesk-v7.0.9-win-x64-signed.zip"
+$zipPath = Join-Path $RepoRoot "out\SaudiPatientDesk-v7.0.10-win-x64-signed.zip"
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 Compress-Archive -Path (Join-Path $OutDir "*") -DestinationPath $zipPath -Force
 

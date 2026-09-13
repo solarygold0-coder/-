@@ -11,6 +11,8 @@ public partial class App : Application
     {
         base.OnStartup(e);
         var healthCheck = e.Args.Any(arg => string.Equals(arg, "--health-check", StringComparison.OrdinalIgnoreCase));
+        var recoveryHealthCheck = e.Args.Any(arg =>
+            string.Equals(arg, "--health-check-recovery", StringComparison.OrdinalIgnoreCase));
 
         // واجهة عربية مع تقويم ميلادي حصراً. لا نستخدم تقويم أم القرى ضمنياً.
         var culture = (CultureInfo)CultureInfo.GetCultureInfo("ar-SA").Clone();
@@ -32,10 +34,14 @@ public partial class App : Application
         try
         {
             AppPaths.EnsureCreated();
+            if (recoveryHealthCheck)
+                Database.CreateLegacyRecoveryFixture();
             Database.Initialize();
-            if (healthCheck)
+            if (healthCheck || recoveryHealthCheck)
             {
                 Database.VerifyHealth();
+                if (recoveryHealthCheck)
+                    Database.VerifyLegacyRecoveryFixture();
                 Shutdown(0);
                 return;
             }
@@ -45,7 +51,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            if (healthCheck)
+            if (healthCheck || recoveryHealthCheck)
             {
                 Shutdown(-1);
                 return;

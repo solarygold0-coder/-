@@ -7,17 +7,26 @@ namespace SaudiPatientDesk.Data;
 public static class Database
 {
     public static SqliteConnection Open()
+        => OpenDatabase(AppPaths.DatabaseFile, SqliteOpenMode.ReadWriteCreate, foreignKeys: true);
+
+    private static SqliteConnection OpenDatabase(
+        string databaseFile,
+        SqliteOpenMode mode,
+        bool foreignKeys,
+        bool tolerateMalformedSchema = false)
     {
         var connection = new SqliteConnection(new SqliteConnectionStringBuilder
         {
-            DataSource = AppPaths.DatabaseFile,
-            Mode = SqliteOpenMode.ReadWriteCreate,
+            DataSource = databaseFile,
+            Mode = mode,
             Cache = SqliteCacheMode.Shared,
-            ForeignKeys = true
+            ForeignKeys = foreignKeys
         }.ToString());
         connection.Open();
         using var command = connection.CreateCommand();
-        command.CommandText = "PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;";
+        command.CommandText =
+            (tolerateMalformedSchema ? "PRAGMA writable_schema=ON;" : string.Empty) +
+            $"PRAGMA foreign_keys={(foreignKeys ? "ON" : "OFF")}; PRAGMA busy_timeout=5000;";
         command.ExecuteNonQuery();
         return connection;
     }
@@ -76,13 +85,21 @@ public static class Database
 
     public static void Initialize()
     {
-        InitializeCore();
+        try
+        {
+            InitializeCore(AppPaths.DatabaseFile);
+        }
+        catch (SqliteException ex) when (IsRecoverableLegacySchemaError(ex))
+        {
+            RebuildLegacyDatabase(ex);
+            InitializeCore(AppPaths.DatabaseFile);
+        }
         BackupNow();
     }
 
-    private static void InitializeCore()
+    private static void InitializeCore(string databaseFile)
     {
-        using var connection = Open();
+        using var connection = OpenDatabase(databaseFile, SqliteOpenMode.ReadWriteCreate, foreignKeys: true);
         using var command = connection.CreateCommand();
         command.CommandText = """
             PRAGMA journal_mode=WAL;
@@ -475,7 +492,7 @@ public static class Database
         AppPaths.EnsureCreated();
         var backup = Path.Combine(
             AppPaths.Backups,
-            $"قبل-ترحيل-الإصدار-7.0.9-{DateTime.Now:yyyyMMdd-HHmmss}.sqlite3");
+            $"قبل-ترحيل-الإصدار-7.0.10-{DateTime.Now:yyyyMMdd-HHmmss}.sqlite3");
         using var destination = new SqliteConnection(
             new SqliteConnectionStringBuilder { DataSource = backup }.ToString());
         destination.Open();
@@ -568,5 +585,251 @@ public static class Database
         using var alter = connection.CreateCommand();
         alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition};";
         alter.ExecuteNonQuery();
+    }
+
+    private static bool IsRecoverableLegacySchemaError(SqliteException exception)
+        => exception.SqliteErrorCode == 1
+           || exception.Message.Contains("near \"IS\"", StringComparison.OrdinalIgnoreCase)
+           || exception.Message.Contains("near IS", StringComparison.OrdinalIgnoreCase)
+           || exception.Message.Contains("malformed database schema", StringComparison.OrdinalIgnoreCase);
+
+    private static void RebuildLegacyDatabase(SqliteException originalError)
+    {
+        AppPaths.EnsureCreated();
+        var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture);
+        var safetyBackup = Path.Combine(AppPaths.Backups, $"قبل-الإصلاح-7.0.10-{stamp}.sqlite3");
+        var quarantine = Path.Combine(AppPaths.Backups, $"قاعدة-قديمة-7.0.10-{stamp}.sqlite3");
+        var rebuilt = Path.Combine(AppPaths.Root, $"rebuild-{Guid.NewGuid():N}.sqlite3");
+
+        try
+        {
+            CreateSafetyBackup(AppPaths.DatabaseFile, safetyBackup);
+            InitializeCore(rebuilt);
+            CopyRecoverableData(AppPaths.DatabaseFile, rebuilt);
+            InitializeCore(rebuilt);
+            VerifyDatabase(rebuilt);
+            ReplaceDatabaseWithRebuiltCopy(rebuilt, quarantine);
+        }
+        catch (Exception recoveryError)
+        {
+            TryDelete(rebuilt);
+            throw new InvalidOperationException(
+                "تعذر إصلاح قاعدة الإصدار السابق تلقائياً، ولم تُحذف بياناتك. " +
+                $"توجد نسخة أمان في: {safetyBackup}\n" +
+                $"سبب الترقية: {originalError.Message}\nسبب الإصلاح: {recoveryError.Message}",
+                recoveryError);
+        }
+    }
+
+    private static void CreateSafetyBackup(string sourceFile, string backupFile)
+    {
+        try
+        {
+            using var source = OpenDatabase(
+                sourceFile, SqliteOpenMode.ReadOnly, foreignKeys: false, tolerateMalformedSchema: true);
+            using var destination = OpenDatabase(backupFile, SqliteOpenMode.ReadWriteCreate, foreignKeys: false);
+            source.BackupDatabase(destination);
+            return;
+        }
+        catch
+        {
+            TryDelete(backupFile);
+        }
+
+        // النسخ الخام هو مسار الطوارئ فقط. نحفظ ملفات WAL/SHM معه ولا نحذف الأصل.
+        File.Copy(sourceFile, backupFile, overwrite: false);
+        CopySidecarIfPresent(sourceFile + "-wal", backupFile + "-wal");
+        CopySidecarIfPresent(sourceFile + "-shm", backupFile + "-shm");
+    }
+
+    private static void CopyRecoverableData(string sourceFile, string destinationFile)
+    {
+        // writable_schema هنا للقراءة فقط: يسمح باستعادة الجداول السليمة حتى لو
+        // ترك إصدار قديم تعريف فهرس غير صالح في sqlite_master.
+        using var source = OpenDatabase(
+            sourceFile, SqliteOpenMode.ReadOnly, foreignKeys: false, tolerateMalformedSchema: true);
+
+        using var destination = OpenDatabase(destinationFile, SqliteOpenMode.ReadWrite, foreignKeys: false);
+        using (var prepare = destination.CreateCommand())
+        {
+            prepare.CommandText = """
+                PRAGMA foreign_keys=OFF;
+                PRAGMA ignore_check_constraints=ON;
+                DROP INDEX IF EXISTS ux_appointments_active_doctor;
+                DROP INDEX IF EXISTS ux_appointments_active_specialist;
+                DROP INDEX IF EXISTS ux_patients_national_active;
+                DROP INDEX IF EXISTS ux_patients_mobile_active;
+                """;
+            prepare.ExecuteNonQuery();
+        }
+
+        var tables = new[]
+        {
+            "patients", "staff", "clinics", "appointments", "attachments",
+            "closure_dates", "clinic_open_days", "app_settings", "audit_log"
+        };
+
+        using var transaction = destination.BeginTransaction();
+        foreach (var table in tables)
+            CopyTable(source, destination, transaction, table);
+        transaction.Commit();
+    }
+
+    private static void CopyTable(
+        SqliteConnection source,
+        SqliteConnection destination,
+        SqliteTransaction transaction,
+        string table)
+    {
+        if (!TableExists(source, table) || CountRows(source, table) == 0) return;
+
+        var sourceColumns = ReadColumns(source, table, includeOnlyWritable: true);
+        var destinationColumns = ReadColumns(destination, table, includeOnlyWritable: true);
+        var columns = sourceColumns.Where(destinationColumns.Contains).ToArray();
+        if (columns.Length == 0) return;
+
+        using (var clear = destination.CreateCommand())
+        {
+            clear.Transaction = transaction;
+            clear.CommandText = $"DELETE FROM {QuoteIdentifier(table)};";
+            clear.ExecuteNonQuery();
+        }
+
+        var quotedColumns = string.Join(",", columns.Select(QuoteIdentifier));
+        using var read = source.CreateCommand();
+        read.CommandText = $"SELECT {quotedColumns} FROM {QuoteIdentifier(table)};";
+        using var reader = read.ExecuteReader();
+        while (reader.Read())
+        {
+            using var insert = destination.CreateCommand();
+            insert.Transaction = transaction;
+            var parameters = string.Join(",", columns.Select((_, index) => $"$v{index}"));
+            insert.CommandText =
+                $"INSERT OR REPLACE INTO {QuoteIdentifier(table)} ({quotedColumns}) VALUES ({parameters});";
+            for (var index = 0; index < columns.Length; index++)
+            {
+                object value = reader.IsDBNull(index) ? DBNull.Value : reader.GetValue(index);
+                if (table == "patients" && columns[index] == "file_number" && value is not string)
+                    value = LegacyFileCode(Convert.ToInt32(value, CultureInfo.InvariantCulture));
+                insert.Parameters.AddWithValue($"$v{index}", value);
+            }
+            insert.ExecuteNonQuery();
+        }
+    }
+
+    private static HashSet<string> ReadColumns(
+        SqliteConnection connection,
+        string table,
+        bool includeOnlyWritable)
+    {
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using var command = connection.CreateCommand();
+        command.CommandText = $"PRAGMA table_xinfo({QuoteIdentifier(table)});";
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            var hidden = reader.FieldCount > 6 && !reader.IsDBNull(6) ? reader.GetInt32(6) : 0;
+            if (!includeOnlyWritable || hidden == 0)
+                columns.Add(reader.GetString(1));
+        }
+        return columns;
+    }
+
+    private static bool TableExists(SqliteConnection connection, string table)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT 1 FROM sqlite_master WHERE type='table' AND name=$name LIMIT 1;";
+        command.Parameters.AddWithValue("$name", table);
+        return command.ExecuteScalar() is not null;
+    }
+
+    private static long CountRows(SqliteConnection connection, string table)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = $"SELECT COUNT(*) FROM {QuoteIdentifier(table)};";
+        return Convert.ToInt64(command.ExecuteScalar(), CultureInfo.InvariantCulture);
+    }
+
+    private static string QuoteIdentifier(string identifier)
+        => "\"" + identifier.Replace("\"", "\"\"") + "\"";
+
+    private static void VerifyDatabase(string databaseFile)
+    {
+        using var connection = OpenDatabase(databaseFile, SqliteOpenMode.ReadWrite, foreignKeys: true);
+        using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA quick_check;";
+        if (!string.Equals(command.ExecuteScalar()?.ToString(), "ok", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("فشل فحص قاعدة البيانات المعاد بناؤها.");
+    }
+
+    private static void ReplaceDatabaseWithRebuiltCopy(string rebuilt, string quarantine)
+    {
+        var original = AppPaths.DatabaseFile;
+        File.Move(original, quarantine, overwrite: false);
+        MoveSidecarIfPresent(original + "-wal", quarantine + "-wal");
+        MoveSidecarIfPresent(original + "-shm", quarantine + "-shm");
+        try
+        {
+            File.Move(rebuilt, original, overwrite: false);
+        }
+        catch
+        {
+            if (!File.Exists(original) && File.Exists(quarantine))
+                File.Move(quarantine, original, overwrite: false);
+            throw;
+        }
+    }
+
+    private static void CopySidecarIfPresent(string source, string destination)
+    {
+        if (File.Exists(source)) File.Copy(source, destination, overwrite: false);
+    }
+
+    private static void MoveSidecarIfPresent(string source, string destination)
+    {
+        if (File.Exists(source)) File.Move(source, destination, overwrite: false);
+    }
+
+    private static void TryDelete(string file)
+    {
+        try { if (File.Exists(file)) File.Delete(file); } catch { }
+    }
+
+    public static void CreateLegacyRecoveryFixture()
+    {
+        TryDelete(AppPaths.DatabaseFile + "-wal");
+        TryDelete(AppPaths.DatabaseFile + "-shm");
+        TryDelete(AppPaths.DatabaseFile);
+        InitializeCore(AppPaths.DatabaseFile);
+        using var connection = Open();
+        using (var patient = connection.CreateCommand())
+        {
+            patient.CommandText = """
+                INSERT INTO patients(
+                  file_number,full_name,national_id,mobile,gender,created_utc,updated_utc,last_activity_utc)
+                VALUES('A-9001','مريض اختبار الاستعادة','1000000001','0500000001','male',$now,$now,$now);
+                """;
+            patient.Parameters.AddWithValue("$now", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+            patient.ExecuteNonQuery();
+        }
+        using var corrupt = connection.CreateCommand();
+        corrupt.CommandText = """
+            PRAGMA writable_schema=ON;
+            INSERT INTO sqlite_master(type,name,tbl_name,rootpage,sql)
+            VALUES('index','legacy_bad_index','patients',0,
+              'CREATE INDEX legacy_bad_index ON patients(national_id) WHERE deleted_utc IS NULL IS');
+            PRAGMA schema_version=99;
+            PRAGMA writable_schema=OFF;
+            """;
+        corrupt.ExecuteNonQuery();
+    }
+
+    public static void VerifyLegacyRecoveryFixture()
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM patients WHERE file_number='A-9001';";
+        if (Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture) != 1)
+            throw new InvalidOperationException("لم تُحفظ بيانات اختبار الاستعادة.");
     }
 }
