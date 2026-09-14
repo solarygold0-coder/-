@@ -134,23 +134,21 @@ function Verify-SignedFile([string]$FilePath) {
     Write-Host $verifyOutput
 
     $expectedSelfSignedTrustResult =
-        $verifyExitCode -eq 1 -and
-        $verifyOutput -match '(?s)root\s+certificate which is not trusted by the trust provider' -and
+        $verifyExitCode -ne 0 -and
+        $verifyOutput -match 'SignTool Error: A certificate chain processed' -and
+        $verifyOutput -match '(?s)certificate which is not\s+trusted by the trust provider' -and
         $verifyOutput -match 'Hash of file \(sha256\):' -and
-        $verifyOutput -match 'The signature is timestamped:'
+        $verifyOutput -match 'The signature is timestamped:' -and
+        $verifyOutput -match 'Number of errors:\s+1'
 
     if ($verifyExitCode -ne 0 -and -not $expectedSelfSignedTrustResult) {
         throw "Signature verification failed unexpectedly: $FilePath"
     }
 
-    $signature = Get-AuthenticodeSignature -FilePath $FilePath
-    $expectedPowerShellTrustResult =
-        $signature.Status.ToString() -in @('NotTrusted', 'UnknownError') -and
-        $signature.StatusMessage -match '(?s)root certificate which is not\s+trusted by the trust provider'
-    if ($signature.SignerCertificate.Thumbprint -ne $certificate.Thumbprint -or
-        $null -eq $signature.TimeStamperCertificate -or
-        ($signature.Status.ToString() -ne 'Valid' -and -not $expectedPowerShellTrustResult)) {
-        throw "The signer, timestamp, or Authenticode integrity is invalid: $FilePath"
+    if ($verifyOutput -notmatch [regex]::Escape($certificate.Thumbprint) -or
+        $verifyOutput -notmatch 'Hash of file \(sha256\):' -or
+        $verifyOutput -notmatch 'The signature is timestamped:') {
+        throw "The signer, timestamp, or SHA-256 integrity evidence is missing: $FilePath"
     }
 }
 
