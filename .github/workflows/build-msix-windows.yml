@@ -10,6 +10,8 @@ on:
       - scripts/04-build-msix.ps1
       - scripts/05-install-msix.ps1
       - scripts/README-MSIX_AR.md
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
