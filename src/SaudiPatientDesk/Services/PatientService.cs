@@ -26,7 +26,7 @@ public sealed class PatientService
         using var command = connection.CreateCommand();
         var normalized = term?.Trim() ?? string.Empty;
         var normalizedFile = normalized.ToUpperInvariant();
-        command.CommandText = PatientSelect + """
+        command.CommandText = PatientSelect + "\n" + """
             WHERE deleted_utc IS NULL
               AND ($q = '' OR full_name LIKE $like OR national_id = $q OR mobile = $q
                    OR file_number = $file OR file_number LIKE $fileLike

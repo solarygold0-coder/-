@@ -46,7 +46,7 @@ cd scripts
 
 Output:
 - `out\SaudiPatientDesk-win-x64\SaudiPatientDesk.exe` (signed)
-- `out\SaudiPatientDesk-v7.0.10-win-x64-signed.zip`
+- `out\SaudiPatientDesk-v7.0.11-win-x64-signed.zip`
 
 Requires **Windows SDK** (signtool). Install via Visual Studio Installer → Individual components → “Windows SDK” / “Signing Tools for Windows SDK”.
 

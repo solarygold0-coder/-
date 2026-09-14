@@ -50,6 +50,12 @@ jobs:
             if ($null -ne $healthError) { Get-Content $healthError.FullName }
             throw "Legacy recovery health check failed: $($recoveryHealth.ExitCode)"
           }
+          $uiHealth = Start-Process out/SaudiPatientDesk-win-x64/SaudiPatientDesk.exe -ArgumentList '--health-check-ui' -Wait -PassThru
+          if ($uiHealth.ExitCode -ne 0) {
+            $healthError = Get-ChildItem out/smoke-localapp -Filter health-error.txt -Recurse | Select-Object -First 1
+            if ($null -ne $healthError) { Get-Content $healthError.FullName }
+            throw "UI startup health check failed: $($uiHealth.ExitCode)"
+          }
 
           function Invoke-BoundedProcess {
             param(
@@ -107,7 +113,7 @@ jobs:
           $certificate = New-SelfSignedCertificate `
             -Type Custom `
             -Subject 'CN=Saudi Patient Desk' `
-            -FriendlyName 'Saudi Patient Desk Code Signing 7.0.10' `
+            -FriendlyName 'Saudi Patient Desk Code Signing 7.0.11' `
             -CertStoreLocation 'Cert:\CurrentUser\My' `
             -KeyAlgorithm RSA `
             -KeyLength 3072 `
@@ -209,10 +215,10 @@ jobs:
           Copy-Item scripts/03-install-certificate.ps1 out/SaudiPatientDesk-win-x64/ -Force
           Copy-Item scripts/README-SIGNING_AR.md out/SaudiPatientDesk-win-x64/ -Force
           Compress-Archive -Path out/SaudiPatientDesk-win-x64/* `
-            -DestinationPath out/SaudiPatientDesk-v7.0.10-win-x64-self-signed.zip
+            -DestinationPath out/SaudiPatientDesk-v7.0.11-win-x64-self-signed.zip
 
       - uses: actions/upload-artifact@v4
         with:
-          name: SaudiPatientDesk-v7.0.10-win-x64-self-signed
-          path: out/SaudiPatientDesk-v7.0.10-win-x64-self-signed.zip
+          name: SaudiPatientDesk-v7.0.11-win-x64-self-signed
+          path: out/SaudiPatientDesk-v7.0.11-win-x64-self-signed.zip
           if-no-files-found: error

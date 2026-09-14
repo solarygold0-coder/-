@@ -40,7 +40,7 @@
         <Border Grid.Row="3" Background="#173C5E" CornerRadius="12" Padding="14">
           <StackPanel>
             <TextBlock Text="الإصدار الجديد المستقل" Foreground="White" FontWeight="SemiBold"/>
-            <TextBlock Text="7.0.10 • ميلادي فقط" Foreground="#AFC4D6" FontSize="12" Margin="0,4,0,0"/>
+            <TextBlock Text="7.0.11 • ميلادي فقط" Foreground="#AFC4D6" FontSize="12" Margin="0,4,0,0"/>
           </StackPanel>
         </Border>
       </Grid>

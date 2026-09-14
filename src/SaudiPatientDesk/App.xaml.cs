@@ -14,6 +14,8 @@ public partial class App : Application
         var healthCheck = e.Args.Any(arg => string.Equals(arg, "--health-check", StringComparison.OrdinalIgnoreCase));
         var recoveryHealthCheck = e.Args.Any(arg =>
             string.Equals(arg, "--health-check-recovery", StringComparison.OrdinalIgnoreCase));
+        var uiHealthCheck = e.Args.Any(arg =>
+            string.Equals(arg, "--health-check-ui", StringComparison.OrdinalIgnoreCase));
 
         // واجهة عربية مع تقويم ميلادي حصراً. لا نستخدم تقويم أم القرى ضمنياً.
         var culture = (CultureInfo)CultureInfo.GetCultureInfo("ar-SA").Clone();
@@ -48,11 +50,17 @@ public partial class App : Application
             }
             Loc.Load(new SettingsService());
             MainWindow = new MainWindow();
+            if (uiHealthCheck)
+            {
+                MainWindow.Close();
+                Shutdown(0);
+                return;
+            }
             MainWindow.Show();
         }
         catch (Exception ex)
         {
-            if (healthCheck || recoveryHealthCheck)
+            if (healthCheck || recoveryHealthCheck || uiHealthCheck)
             {
                 try
                 {
@@ -66,7 +74,10 @@ public partial class App : Application
                 Shutdown(-1);
                 return;
             }
-            MessageBox.Show("تعذر تشغيل البرنامج أو فتح قاعدة البيانات.\n" + ex.Message,
+            var errorFile = Path.Combine(AppPaths.Root, "startup-error-7.0.11.txt");
+            try { File.WriteAllText(errorFile, ex.ToString()); } catch { }
+            MessageBox.Show("تعذر تشغيل البرنامج أو فتح قاعدة البيانات — الإصدار 7.0.11.\n" +
+                            ex.Message + "\n\nسجل التشخيص: " + errorFile,
                 "تعذر التشغيل", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(-1);
         }

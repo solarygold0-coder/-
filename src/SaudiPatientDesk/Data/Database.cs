@@ -501,7 +501,7 @@ public static class Database
         AppPaths.EnsureCreated();
         var backup = Path.Combine(
             AppPaths.Backups,
-            $"قبل-ترحيل-الإصدار-7.0.10-{DateTime.Now:yyyyMMdd-HHmmss}.sqlite3");
+            $"قبل-ترحيل-الإصدار-7.0.11-{DateTime.Now:yyyyMMdd-HHmmss}.sqlite3");
         using var destination = new SqliteConnection(
             new SqliteConnectionStringBuilder { DataSource = backup }.ToString());
         destination.Open();
@@ -606,8 +606,8 @@ public static class Database
     {
         AppPaths.EnsureCreated();
         var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture);
-        var safetyBackup = Path.Combine(AppPaths.Backups, $"قبل-الإصلاح-7.0.10-{stamp}.sqlite3");
-        var quarantine = Path.Combine(AppPaths.Backups, $"قاعدة-قديمة-7.0.10-{stamp}.sqlite3");
+        var safetyBackup = Path.Combine(AppPaths.Backups, $"قبل-الإصلاح-7.0.11-{stamp}.sqlite3");
+        var quarantine = Path.Combine(AppPaths.Backups, $"قاعدة-قديمة-7.0.11-{stamp}.sqlite3");
         var rebuilt = Path.Combine(AppPaths.Root, $"rebuild-{Guid.NewGuid():N}.sqlite3");
 
         try
