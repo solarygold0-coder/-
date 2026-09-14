@@ -124,6 +124,39 @@ jobs:
             }
           }
 
+      - name: Install MSIX and run the registered Windows package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $packagePath = "out/msix-release/SaudiPatientDesk-v$env:PACKAGE_VERSION-x64.msix"
+          $installed = $null
+          try {
+            Add-AppxPackage -Path $packagePath -ForceApplicationShutdown
+            $installed = Get-AppxPackage -Name 'SaudiPatientDesk' |
+              Sort-Object Version -Descending | Select-Object -First 1
+            if ($null -eq $installed) { throw 'The MSIX package was not registered by Windows.' }
+            if ($installed.Version.ToString() -ne $env:PACKAGE_VERSION) {
+              throw "Installed package version mismatch: $($installed.Version)"
+            }
+            if ($installed.Publisher -ne 'CN=Saudi Patient Desk') {
+              throw "Installed package publisher mismatch: $($installed.Publisher)"
+            }
+
+            New-Item -ItemType Directory -Force -Path out/smoke-installed-msix | Out-Null
+            $env:SAUDI_PATIENT_DESK_DATA_ROOT = (Resolve-Path out/smoke-installed-msix).Path
+            $installedExecutable = Join-Path $installed.InstallLocation 'SaudiPatientDesk.exe'
+            $process = Start-Process $installedExecutable -ArgumentList '--health-check-ui' -Wait -PassThru
+            if ($process.ExitCode -ne 0) {
+              throw "Installed MSIX UI health check failed: $($process.ExitCode)"
+            }
+            Write-Host "Installed package verified: $($installed.PackageFullName)"
+          }
+          finally {
+            if ($null -ne $installed) {
+              Remove-AppxPackage -Package $installed.PackageFullName -ErrorAction SilentlyContinue
+            }
+          }
+
       - name: Assemble installer release
         shell: pwsh
         run: |
