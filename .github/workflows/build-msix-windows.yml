@@ -92,6 +92,7 @@ jobs:
             throw "Certificate subject does not match the permanent MSIX publisher: $($imported.Subject)"
           }
           Export-Certificate -Cert $imported -FilePath $cerPath -Type CERT | Out-Null
+          Import-Certificate -FilePath $cerPath -CertStoreLocation 'Cert:\CurrentUser\Root' | Out-Null
           Import-Certificate -FilePath $cerPath -CertStoreLocation 'Cert:\CurrentUser\TrustedPeople' | Out-Null
 
           "SIGNING_PFX_PATH=$pfxPath" >> $env:GITHUB_ENV

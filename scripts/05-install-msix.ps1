@@ -28,6 +28,16 @@ if (-not (Test-Path $PackagePath)) { throw "ملف التثبيت غير موج�
 if (-not (Test-Path $CertificatePath)) { throw "ملف الشهادة غير موجود: $CertificatePath" }
 
 $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($CertificatePath)
+$trustedRoot = Get-ChildItem "Cert:\CurrentUser\Root\$($certificate.Thumbprint)" -ErrorAction SilentlyContinue
+if ($null -eq $trustedRoot) {
+    Write-Warning "يلزم إضافة شهادة Saudi Patient Desk الذاتية إلى مخزن الجذر الموثوق للمستخدم الحالي كي يقبل ويندوز حزمة MSIX."
+    Write-Warning "لا توافق إلا إذا حصلت على هذه الملفات من الإصدار الرسمي للمشروع."
+    $consent = Read-Host "اكتب أوافق للمتابعة"
+    if ($consent.Trim() -ne "أوافق") {
+        throw "أُلغي التثبيت: لم تتم الموافقة على تثبيت الشهادة."
+    }
+    Import-Certificate -FilePath $CertificatePath -CertStoreLocation "Cert:\CurrentUser\Root" | Out-Null
+}
 $trusted = Get-ChildItem "Cert:\CurrentUser\TrustedPeople\$($certificate.Thumbprint)" -ErrorAction SilentlyContinue
 if ($null -eq $trusted) {
     Import-Certificate -FilePath $CertificatePath -CertStoreLocation "Cert:\CurrentUser\TrustedPeople" | Out-Null
