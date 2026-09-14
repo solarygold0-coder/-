@@ -128,10 +128,34 @@ $manifest | Set-Content $manifestPath -Encoding utf8
 if ($LASTEXITCODE -ne 0) { throw "MakeAppx failed." }
 Sign-File $PackagePath
 
-& $signTool verify /pa /all /v $executable
-if ($LASTEXITCODE -ne 0) { throw "Executable signature verification failed." }
-& $signTool verify /pa /all /v $PackagePath
-if ($LASTEXITCODE -ne 0) { throw "MSIX signature verification failed." }
+function Verify-SignedFile([string]$FilePath) {
+    $verifyOutput = (& $signTool verify /pa /all /v $FilePath 2>&1 | Out-String)
+    $verifyExitCode = $LASTEXITCODE
+    Write-Host $verifyOutput
+
+    $expectedSelfSignedTrustResult =
+        $verifyExitCode -eq 1 -and
+        $verifyOutput -match '(?s)root\s+certificate which is not trusted by the trust provider' -and
+        $verifyOutput -match 'Hash of file \(sha256\):' -and
+        $verifyOutput -match 'The signature is timestamped:'
+
+    if ($verifyExitCode -ne 0 -and -not $expectedSelfSignedTrustResult) {
+        throw "Signature verification failed unexpectedly: $FilePath"
+    }
+
+    $signature = Get-AuthenticodeSignature -FilePath $FilePath
+    $expectedPowerShellTrustResult =
+        $signature.Status.ToString() -in @('NotTrusted', 'UnknownError') -and
+        $signature.StatusMessage -match '(?s)root certificate which is not\s+trusted by the trust provider'
+    if ($signature.SignerCertificate.Thumbprint -ne $certificate.Thumbprint -or
+        $null -eq $signature.TimeStamperCertificate -or
+        ($signature.Status.ToString() -ne 'Valid' -and -not $expectedPowerShellTrustResult)) {
+        throw "The signer, timestamp, or Authenticode integrity is invalid: $FilePath"
+    }
+}
+
+Verify-SignedFile $executable
+Verify-SignedFile $PackagePath
 
 $certificate.Dispose()
 Write-Host "MSIX created and verified: $PackagePath" -ForegroundColor Green
