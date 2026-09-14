@@ -31,8 +31,27 @@ public sealed class SettingsService
             """;
         command.Parameters.AddWithValue("$key", key);
         command.Parameters.AddWithValue("$value", value.Trim());
-        command.Parameters.AddWithValue("$now", DateTime.UtcNow.ToString("O"));
+        command.Parameters.AddWithValue("$now", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
         command.ExecuteNonQuery();
+    }
+
+    public HashSet<DayOfWeek> GetWeeklyClosedDays()
+    {
+        var values = Get("weekly_closed_days", "Friday,Saturday")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return values
+            .Select(value => Enum.TryParse<DayOfWeek>(value, true, out var day) ? day : (DayOfWeek?)null)
+            .Where(day => day.HasValue)
+            .Select(day => day!.Value)
+            .ToHashSet();
+    }
+
+    public bool IsWeeklyClosed(DateTime date) => GetWeeklyClosedDays().Contains(date.DayOfWeek);
+
+    public void SetWeeklyClosedDays(IEnumerable<DayOfWeek> days)
+    {
+        var value = string.Join(",", days.Distinct().OrderBy(day => (int)day));
+        Set("weekly_closed_days", value);
     }
 
     public string CreateBackup()

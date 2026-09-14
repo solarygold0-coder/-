@@ -42,6 +42,34 @@ public partial class MainWindow : Window
         InitializeAppointmentSelectors();
         RefreshClosures();
         RefreshAll();
+        if (_staff.ListAll().Count == 0 || _clinics.ListAll().Count == 0)
+            ShowPanel("settings");
+        if (!string.IsNullOrWhiteSpace(Database.LastBackupWarning))
+        {
+            BackupWarningText.Text = Database.LastBackupWarning;
+            BackupWarningBanner.Visibility = Visibility.Visible;
+        }
+    }
+
+    public void VerifyUiHealth()
+    {
+        ShowPanel("settings");
+        UpdateLayout();
+        if (FlowDirection != System.Windows.FlowDirection.RightToLeft ||
+            SettingsPanel.FlowDirection != System.Windows.FlowDirection.RightToLeft ||
+            StaffGrid.FlowDirection != System.Windows.FlowDirection.RightToLeft ||
+            ClinicsGrid.FlowDirection != System.Windows.FlowDirection.RightToLeft)
+            throw new InvalidOperationException("فشل اختبار اتجاه الواجهة العربية من اليمين إلى اليسار.");
+        if (AddClinicButton.Visibility != Visibility.Visible || AddStaffButton.Visibility != Visibility.Visible ||
+            string.IsNullOrWhiteSpace(AddClinicButton.Content?.ToString()) ||
+            string.IsNullOrWhiteSpace(AddStaffButton.Content?.ToString()))
+            throw new InvalidOperationException("أزرار إضافة العيادة أو المعالج غير ظاهرة في الإعدادات.");
+        if (_staff.ListAll().Count != 0 || _clinics.ListAll().Count != 0)
+            throw new InvalidOperationException("قاعدة أول تشغيل يجب أن تبدأ بلا عيادات أو معالجين افتراضيين.");
+        if (TimeDisplay.MinuteOptions.Count != 60 ||
+            TimeDisplay.Hour12Options.Count * TimeDisplay.PeriodOptions.Count != 24 ||
+            AppointmentYearBox.Items.Count < 51)
+            throw new InvalidOperationException("قوائم الوقت أو السنوات غير مكتملة.");
     }
 
     private void InitializeAppointmentSelectors(DateTime? selected = null)
@@ -53,8 +81,9 @@ public partial class MainWindow : Window
             ?? DateTime.Today.AddDays(1).Add(hours.Start));
 
         var firstYear = Math.Min(DateTime.Today.Year, value.Year);
+        var lastYear = Math.Max(DateTime.Today.Year + 50, value.Year);
         AppointmentMonthBox.ItemsSource = Enumerable.Range(1, 12);
-        AppointmentYearBox.ItemsSource = Enumerable.Range(firstYear, 21);
+        AppointmentYearBox.ItemsSource = Enumerable.Range(firstYear, lastYear - firstYear + 1);
 
         AppointmentMonthBox.SelectedItem = value.Month;
         AppointmentYearBox.SelectedItem = value.Year;
@@ -111,7 +140,6 @@ public partial class MainWindow : Window
         TodayCount.Text = snapshot.TodayAppointments.ToString("N0");
         AlertsCount.Text = snapshot.UpcomingAlerts.ToString("N0");
         InactiveCount.Text = snapshot.InactiveTenYears.ToString("N0");
-        DashboardAppointmentsGrid.ItemsSource = _appointments.Upcoming();
         ApplyAppointmentFilter();
         PatientsGrid.ItemsSource = _patients.Search(PatientFilter.Text);
         RefreshTimelineAndToday();
@@ -172,6 +200,13 @@ public partial class MainWindow : Window
 
     private void AddAppointment_Click(object sender, RoutedEventArgs e)
     {
+        if (_staff.ListActive().Count == 0 || _clinics.ListActive().Count == 0)
+        {
+            ShowPanel("settings");
+            MessageBox.Show("أضف عيادة ومعالجاً نشطاً من الإعدادات أولاً.", "إعداد المواعيد",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
         _editingAppointment = null;
         AppointmentFormTitle.Text = "إضافة موعد";
         AppointmentFormSubtitle.Text = "أدخل رقم الملف وستظهر بيانات المراجع كاملة";
@@ -180,7 +215,6 @@ public partial class MainWindow : Window
         AppointmentNotesBox.Clear();
         AppointmentDoctorBox.SelectedIndex = -1;
         AppointmentSpecialistBox.SelectedIndex = -1;
-        AppointmentStaffBox.SelectedIndex = -1;
         AppointmentClinicBox.SelectedIndex = AppointmentClinicBox.Items.Count > 0 ? 0 : -1;
         AppointmentRenewedBox.IsChecked = false;
         InitializeAppointmentSelectors();
@@ -205,7 +239,6 @@ public partial class MainWindow : Window
         AppointmentFormSubtitle.Text = $"رقم الموعد: {appointment.Id} • التاريخ ميلادي";
         SaveAppointmentButton.Content = "حفظ التعديلات";
         AppointmentFileNumberBox.Text = appointment.FileNumber;
-        if (appointment.StaffId is long sid) AppointmentStaffBox.SelectedValue = sid;
         AppointmentDoctorBox.SelectedValue = appointment.DoctorId;
         AppointmentSpecialistBox.SelectedValue = appointment.SpecialistId;
         AppointmentClinicBox.SelectedValue = appointment.ClinicId;
@@ -531,6 +564,8 @@ public partial class MainWindow : Window
         var specialistId = AppointmentSpecialistBox.SelectedValue as long?;
         var staffId = doctorId ?? specialistId;
         var clinicId = AppointmentClinicBox.SelectedValue as long?;
+        if (clinicId is null)
+            throw new InvalidOperationException("اختر العيادة.");
         var kind = AppointmentRenewedBox.IsChecked == true ? "renewed" : "regular";
         return _editingAppointment is null
             ? _appointments.Add(fileNumber, startsAt, AppointmentNotesBox.Text, staffId, doctorId, specialistId, clinicId, kind)
@@ -724,17 +759,26 @@ public partial class MainWindow : Window
     private void LoadStaffCombos()
     {
         var list = _staff.ListActive();
-        AppointmentStaffBox.ItemsSource = list;
         TimelineStaffFilterBox.ItemsSource = list;
         AppointmentDoctorBox.ItemsSource = _staff.ListDoctors();
         AppointmentSpecialistBox.ItemsSource = _staff.ListSpecialists();
         AppointmentClinicBox.ItemsSource = _clinics.ListActive();
         StaffGrid.ItemsSource = _staff.ListAll()
-            .Select(s => new StaffEditRow { Id = s.Id, FullName = s.FullName, RoleDisplay = s.RoleDisplay })
+            .Select(s => new StaffEditRow
+            {
+                Id = s.Id,
+                FullName = s.FullName,
+                RoleDisplay = s.RoleDisplay,
+                IsActive = s.IsActive
+            })
             .ToList();
         ClinicsGrid.ItemsSource = _clinics.ListAll()
-            .Select(c => new ClinicEditRow { Id = c.Id, Name = c.Name, IsActive = c.IsActive })
+            .Select(c => new ClinicEditRow { Id = c.Id, Name = c.Name })
             .ToList();
+        if (FirstRunHint is not null)
+            FirstRunHint.Visibility = list.Count == 0 || AppointmentClinicBox.Items.Count == 0
+                ? Visibility.Visible
+                : Visibility.Collapsed;
         if (AppointmentClinicBox.Items.Count > 0 && AppointmentClinicBox.SelectedIndex < 0)
             AppointmentClinicBox.SelectedIndex = 0;
     }
@@ -851,6 +895,40 @@ public partial class MainWindow : Window
         }
     }
 
+    private void AddStaff_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var role = (NewStaffRoleBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "doctor";
+            _staff.Add(NewStaffNameBox.Text, role);
+            NewStaffNameBox.Clear();
+            LoadStaffCombos();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "تعذر إضافة المعالج", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void ToggleStaffActive_Click(object sender, RoutedEventArgs e)
+    {
+        if (StaffGrid.SelectedItem is not StaffEditRow row)
+        {
+            MessageBox.Show("حدد طبيباً أو أخصائياً أولاً.", "إدارة المعالجين",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        try
+        {
+            _staff.SetActive(row.Id, !row.IsActive);
+            LoadStaffCombos();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "تعذر تغيير الحالة", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
     private void AddClinic_Click(object sender, RoutedEventArgs e)
     {
         try
@@ -893,12 +971,12 @@ public partial class MainWindow : Window
     {
         WorkStartHourBox.ItemsSource = TimeDisplay.Hour12Options;
         WorkEndHourBox.ItemsSource = TimeDisplay.Hour12Options;
-        WorkStartMinuteBox.ItemsSource = ClinicHours.FineMinuteOptions();
-        WorkEndMinuteBox.ItemsSource = ClinicHours.FineMinuteOptions();
+        WorkStartMinuteBox.ItemsSource = TimeDisplay.MinuteOptions;
+        WorkEndMinuteBox.ItemsSource = TimeDisplay.MinuteOptions;
         BreakStartHourBox.ItemsSource = TimeDisplay.Hour12Options;
         BreakEndHourBox.ItemsSource = TimeDisplay.Hour12Options;
-        BreakStartMinuteBox.ItemsSource = ClinicHours.FineMinuteOptions();
-        BreakEndMinuteBox.ItemsSource = ClinicHours.FineMinuteOptions();
+        BreakStartMinuteBox.ItemsSource = TimeDisplay.MinuteOptions;
+        BreakEndMinuteBox.ItemsSource = TimeDisplay.MinuteOptions;
 
         var hours = ClinicHours.Load(_settings);
         var (startH12, startP) = TimeDisplay.FromHour24((int)hours.Start.TotalHours);
@@ -921,6 +999,15 @@ public partial class MainWindow : Window
         BreakStartPeriodBox.SelectedIndex = bStartP == "م" ? 1 : 0;
         BreakEndPeriodBox.SelectedIndex = bEndP == "م" ? 1 : 0;
         BreakEnabledBox.IsChecked = hours.BreakEnabled;
+
+        var closedDays = _settings.GetWeeklyClosedDays();
+        ClosedSundayBox.IsChecked = closedDays.Contains(DayOfWeek.Sunday);
+        ClosedMondayBox.IsChecked = closedDays.Contains(DayOfWeek.Monday);
+        ClosedTuesdayBox.IsChecked = closedDays.Contains(DayOfWeek.Tuesday);
+        ClosedWednesdayBox.IsChecked = closedDays.Contains(DayOfWeek.Wednesday);
+        ClosedThursdayBox.IsChecked = closedDays.Contains(DayOfWeek.Thursday);
+        ClosedFridayBox.IsChecked = closedDays.Contains(DayOfWeek.Friday);
+        ClosedSaturdayBox.IsChecked = closedDays.Contains(DayOfWeek.Saturday);
 
         foreach (ComboBoxItem item in SlotMinutesBox.Items)
         {
@@ -1022,6 +1109,7 @@ public partial class MainWindow : Window
             _settings.Set("clinic_name", ClinicNameBox.Text);
             Loc.Save(_settings);
             configuredHours.Save(_settings);
+            _settings.SetWeeklyClosedDays(SelectedWeeklyClosedDays());
             Loc.ApplyToWindow(this);
             ApplyShellLanguage();
 
@@ -1044,6 +1132,17 @@ public partial class MainWindow : Window
         {
             MessageBox.Show(ex.Message, "تعذر الحفظ", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    private IEnumerable<DayOfWeek> SelectedWeeklyClosedDays()
+    {
+        if (ClosedSundayBox.IsChecked == true) yield return DayOfWeek.Sunday;
+        if (ClosedMondayBox.IsChecked == true) yield return DayOfWeek.Monday;
+        if (ClosedTuesdayBox.IsChecked == true) yield return DayOfWeek.Tuesday;
+        if (ClosedWednesdayBox.IsChecked == true) yield return DayOfWeek.Wednesday;
+        if (ClosedThursdayBox.IsChecked == true) yield return DayOfWeek.Thursday;
+        if (ClosedFridayBox.IsChecked == true) yield return DayOfWeek.Friday;
+        if (ClosedSaturdayBox.IsChecked == true) yield return DayOfWeek.Saturday;
     }
 
     private void UpdateSlotStatus()

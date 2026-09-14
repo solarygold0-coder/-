@@ -14,38 +14,40 @@ public sealed class AppointmentService
     {
         var patient = _patients.FindByFileNumber(fileNumber)
             ?? throw new InvalidOperationException("رقم الملف غير موجود.");
-        var error = Validation.Appointment(startsAt);
+        var error = Validation.Appointment(startsAt, _settings);
         if (error is not null) throw new InvalidOperationException(error);
         var hoursError = ClinicHours.Load(_settings).ValidateAppointmentTime(startsAt);
         if (hoursError is not null) throw new InvalidOperationException(hoursError);
         ValidateClinicians(doctorId, specialistId);
 
         using var connection = Database.Open();
-        EnsureClinicIsOpen(connection, startsAt);
+        using var transaction = connection.BeginTransaction(deferred: false);
+        EnsureCliniciansAreActive(connection, transaction, doctorId, specialistId);
+        EnsureClinicIsOpen(connection, transaction, startsAt);
         if (clinicId is long cid)
-            new ClinicService().EnsureClinicAllowedOnDay(cid, startsAt);
-        EnsureClinicianSlotsFree(connection, startsAt, doctorId, specialistId, null);
-        EnsureSlotIsAvailable(connection, startsAt, null, staffId);
+            ClinicService.EnsureClinicAllowedOnDay(connection, transaction, cid, startsAt);
+        EnsureClinicianSlotsFree(connection, transaction, startsAt, doctorId, specialistId, null);
 
-        using var transaction = connection.BeginTransaction();
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
             INSERT INTO appointments(patient_id, starts_at_local, notes, created_utc, updated_utc, staff_id,
-              doctor_id, specialist_id, clinic_id, kind)
+              doctor_id, specialist_id, clinic_id, kind, visit_stage)
             VALUES($patient, $start, $notes, $now, $now, $staff,
-              $doctor, $specialist, $clinic, $kind);
+              $doctor, $specialist, $clinic, $kind, $stage);
             SELECT last_insert_rowid();
             """;
         command.Parameters.AddWithValue("$patient", patient.Id);
         command.Parameters.AddWithValue("$start", FormatLocal(startsAt));
         command.Parameters.AddWithValue("$notes", (object?)notes?.Trim() ?? DBNull.Value);
         command.Parameters.AddWithValue("$now", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
-        command.Parameters.AddWithValue("$staff", staffId is null ? DBNull.Value : staffId.Value);
+        var effectiveStaffId = staffId ?? doctorId ?? specialistId;
+        command.Parameters.AddWithValue("$staff", effectiveStaffId is null ? DBNull.Value : effectiveStaffId.Value);
         command.Parameters.AddWithValue("$doctor", doctorId is null ? DBNull.Value : doctorId.Value);
         command.Parameters.AddWithValue("$specialist", specialistId is null ? DBNull.Value : specialistId.Value);
         command.Parameters.AddWithValue("$clinic", clinicId is null ? DBNull.Value : clinicId.Value);
         command.Parameters.AddWithValue("$kind", string.IsNullOrWhiteSpace(kind) ? "regular" : kind);
+        command.Parameters.AddWithValue("$stage", string.Empty);
         long id;
         try
         {
@@ -53,32 +55,32 @@ public sealed class AppointmentService
         }
         catch (SqliteException ex) when (IsScheduleConflict(ex))
         {
-            throw new InvalidOperationException("تعارض الموعد مع حجز قائم للطبيب أو الأخصائي.", ex);
+            throw MapScheduleConflict(ex);
         }
         TouchLastActivity(connection, patient.Id, transaction);
         transaction.Commit();
         Database.Log("appointment.add", fileNumber + " " + FormatLocal(startsAt));
-        return Find(id) ?? new Appointment(id, patient.Id, patient.FileNumber, patient.FullName, startsAt, "scheduled", notes, staffId);
+        return Find(id) ?? new Appointment(id, patient.Id, patient.FileNumber, patient.FullName, startsAt, "scheduled", notes, effectiveStaffId);
     }
 
     public Appointment Update(long appointmentId, string fileNumber, DateTime startsAt, string? notes, long? staffId = null, long? doctorId = null, long? specialistId = null, long? clinicId = null, string kind = "regular")
     {
         var patient = _patients.FindByFileNumber(fileNumber)
             ?? throw new InvalidOperationException("رقم الملف غير موجود.");
-        var error = Validation.Appointment(startsAt);
+        var error = Validation.Appointment(startsAt, _settings);
         if (error is not null) throw new InvalidOperationException(error);
         var hoursError = ClinicHours.Load(_settings).ValidateAppointmentTime(startsAt);
         if (hoursError is not null) throw new InvalidOperationException(hoursError);
         ValidateClinicians(doctorId, specialistId);
 
         using var connection = Database.Open();
-        EnsureClinicIsOpen(connection, startsAt);
+        using var transaction = connection.BeginTransaction(deferred: false);
+        EnsureCliniciansAreActive(connection, transaction, doctorId, specialistId);
+        EnsureClinicIsOpen(connection, transaction, startsAt);
         if (clinicId is long cid)
-            new ClinicService().EnsureClinicAllowedOnDay(cid, startsAt);
-        EnsureClinicianSlotsFree(connection, startsAt, doctorId, specialistId, appointmentId);
-        EnsureSlotIsAvailable(connection, startsAt, appointmentId, staffId);
+            ClinicService.EnsureClinicAllowedOnDay(connection, transaction, cid, startsAt, appointmentId);
+        EnsureClinicianSlotsFree(connection, transaction, startsAt, doctorId, specialistId, appointmentId);
 
-        using var transaction = connection.BeginTransaction();
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
@@ -93,7 +95,8 @@ public sealed class AppointmentService
         command.Parameters.AddWithValue("$notes", (object?)notes?.Trim() ?? DBNull.Value);
         command.Parameters.AddWithValue("$now", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$id", appointmentId);
-        command.Parameters.AddWithValue("$staff", staffId is null ? DBNull.Value : staffId.Value);
+        var effectiveStaffId = staffId ?? doctorId ?? specialistId;
+        command.Parameters.AddWithValue("$staff", effectiveStaffId is null ? DBNull.Value : effectiveStaffId.Value);
         command.Parameters.AddWithValue("$doctor", doctorId is null ? DBNull.Value : doctorId.Value);
         command.Parameters.AddWithValue("$specialist", specialistId is null ? DBNull.Value : specialistId.Value);
         command.Parameters.AddWithValue("$clinic", clinicId is null ? DBNull.Value : clinicId.Value);
@@ -105,9 +108,10 @@ public sealed class AppointmentService
         }
         catch (SqliteException ex) when (IsScheduleConflict(ex))
         {
-            throw new InvalidOperationException("تعارض الموعد مع حجز قائم للطبيب أو الأخصائي.", ex);
+            throw MapScheduleConflict(ex);
         }
         TouchLastActivity(connection, patient.Id, transaction);
+        ClinicService.ReleaseUnusedClinicDays(connection, transaction);
         transaction.Commit();
         Database.Log("appointment.update", fileNumber + " " + FormatLocal(startsAt));
 
@@ -129,60 +133,31 @@ public sealed class AppointmentService
         if (command.ExecuteNonQuery() != 1)
             throw new InvalidOperationException("الموعد ملغي مسبقاً أو غير موجود.");
         TouchLastActivityForAppointment(connection, appointmentId, transaction);
+        ClinicService.ReleaseUnusedClinicDays(connection, transaction);
         transaction.Commit();
         Database.Log("appointment.cancel", appointmentId.ToString());
     }
 
-    public IReadOnlyList<Appointment> Upcoming(int days = 30, bool scheduledOnly = true, int limit = 500)
-    {
-        using var connection = Database.Open();
-        using var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT a.id, p.id, p.file_number, p.full_name, a.starts_at_local, a.status, a.notes,
-                   a.staff_id, s.full_name, a.doctor_id, d.full_name, a.specialist_id, sp.full_name,
-                   a.clinic_id, c.full_name, IFNULL(a.kind,'regular')
-            FROM appointments a JOIN patients p ON p.id=a.patient_id
-            LEFT JOIN staff s ON s.id=a.staff_id
-            LEFT JOIN staff d ON d.id=a.doctor_id
-            LEFT JOIN staff sp ON sp.id=a.specialist_id
-            LEFT JOIN clinics c ON c.id=a.clinic_id
-            WHERE a.deleted_utc IS NULL AND p.deleted_utc IS NULL
-              AND ($scheduled_only=0 OR a.status='scheduled')
-              AND a.starts_at_local >= $start AND a.starts_at_local < $end
-            ORDER BY a.starts_at_local LIMIT $limit;
-            """;
-        command.Parameters.AddWithValue("$scheduled_only", scheduledOnly ? 1 : 0);
-        command.Parameters.AddWithValue("$start", FormatLocal(DateTime.Now));
-        command.Parameters.AddWithValue("$end", FormatLocal(DateTime.Now.AddDays(days)));
-        command.Parameters.AddWithValue("$limit", Math.Clamp(limit, 1, 10000));
-        using var reader = command.ExecuteReader();
-        var items = new List<Appointment>();
-        while (reader.Read())
-            items.Add(ReadAppointment(reader));
-        return items;
-    }
-
     public bool IsSlotFree(DateTime startsAt, long? exceptAppointmentId = null, long? staffId = null)
     {
+        if (staffId is null) return true;
         using var connection = Database.Open();
-        using var conflict = connection.CreateCommand();
-        conflict.CommandText = """
-            SELECT COUNT(*) FROM appointments
-            WHERE starts_at_local=$start AND deleted_utc IS NULL AND status <> 'cancelled'
-              AND ($staff IS NULL OR staff_id=$staff OR doctor_id=$staff OR specialist_id=$staff)
-              AND ($id IS NULL OR id <> $id);
-            """;
-        conflict.Parameters.AddWithValue("$start", FormatLocal(startsAt));
-        conflict.Parameters.AddWithValue("$staff", staffId is null ? DBNull.Value : staffId.Value);
-        conflict.Parameters.AddWithValue("$id", exceptAppointmentId is null ? DBNull.Value : exceptAppointmentId.Value);
-        return Convert.ToInt32(conflict.ExecuteScalar()) == 0;
+        try
+        {
+            EnsureClinicianSlotsFree(connection, null, startsAt, staffId, staffId, exceptAppointmentId);
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     public string? DescribeSlot(DateTime startsAt, long? exceptAppointmentId = null,
         long? doctorId = null, long? specialistId = null)
     {
-        if (startsAt.DayOfWeek is DayOfWeek.Friday or DayOfWeek.Saturday)
-            return "مغلق (جمعة/سبت)";
+        if (_settings.IsWeeklyClosed(startsAt))
+            return "مغلق أسبوعياً حسب الإعدادات";
         using var connection = Database.Open();
         using var closure = connection.CreateCommand();
         closure.CommandText = "SELECT reason FROM closure_dates WHERE closed_date=$date;";
@@ -196,7 +171,7 @@ public sealed class AppointmentService
             return "اختر الطبيب أو الأخصائي لمعرفة توفر الخانة.";
         try
         {
-            EnsureClinicianSlotsFree(connection, startsAt, doctorId, specialistId, exceptAppointmentId);
+            EnsureClinicianSlotsFree(connection, null, startsAt, doctorId, specialistId, exceptAppointmentId);
         }
         catch (InvalidOperationException ex)
         {
@@ -205,29 +180,15 @@ public sealed class AppointmentService
         return "متاح";
     }
 
-    private static void EnsureClinicIsOpen(SqliteConnection connection, DateTime startsAt)
+    private static void EnsureClinicIsOpen(
+        SqliteConnection connection, SqliteTransaction transaction, DateTime startsAt)
     {
         using var closure = connection.CreateCommand();
+        closure.Transaction = transaction;
         closure.CommandText = "SELECT reason FROM closure_dates WHERE closed_date=$date;";
         closure.Parameters.AddWithValue("$date", startsAt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
         if (closure.ExecuteScalar() is string reason)
             throw new InvalidOperationException("العيادة مغلقة في هذا اليوم: " + reason);
-    }
-
-    private static void EnsureSlotIsAvailable(SqliteConnection connection, DateTime startsAt, long? exceptId, long? staffId)
-    {
-        using var conflict = connection.CreateCommand();
-        conflict.CommandText = """
-            SELECT COUNT(*) FROM appointments
-            WHERE starts_at_local=$start AND deleted_utc IS NULL AND status <> 'cancelled'
-              AND IFNULL(staff_id,0)=IFNULL($staff,0)
-              AND ($id IS NULL OR id <> $id);
-            """;
-        conflict.Parameters.AddWithValue("$start", FormatLocal(startsAt));
-        conflict.Parameters.AddWithValue("$staff", staffId is null ? DBNull.Value : staffId.Value);
-        conflict.Parameters.AddWithValue("$id", exceptId is null ? DBNull.Value : exceptId.Value);
-        if (Convert.ToInt32(conflict.ExecuteScalar()) > 0)
-            throw new InvalidOperationException("هذا الوقت محجوز لنفس الطبيب/الأخصائي.");
     }
 
     private static void TouchLastActivity(
@@ -260,6 +221,15 @@ public sealed class AppointmentService
     private static bool IsScheduleConflict(SqliteException exception) =>
         exception.SqliteErrorCode == 19 &&
         exception.Message.Contains("UNIQUE constraint failed", StringComparison.OrdinalIgnoreCase);
+
+    private static InvalidOperationException MapScheduleConflict(SqliteException exception)
+    {
+        if (exception.Message.Contains("doctor_id", StringComparison.OrdinalIgnoreCase))
+            return new InvalidOperationException("هذا الوقت محجوز للطبيب المحدد.", exception);
+        if (exception.Message.Contains("specialist_id", StringComparison.OrdinalIgnoreCase))
+            return new InvalidOperationException("هذا الوقت محجوز للأخصائي المحدد.", exception);
+        return new InvalidOperationException("تعارض الموعد مع حجز قائم.", exception);
+    }
 
     private static string FormatLocal(DateTime value)
     {
@@ -326,12 +296,14 @@ public sealed class AppointmentService
         if (command.ExecuteNonQuery() != 1)
             throw new InvalidOperationException("تعذر تحديث حالة الموعد.");
         TouchLastActivityForAppointment(connection, appointmentId, transaction);
+        if (status != "scheduled")
+            ClinicService.ReleaseUnusedClinicDays(connection, transaction);
         transaction.Commit();
     }
 
     public IReadOnlyList<TodayRow> TodayList(DateTime? day = null, long? staffId = null)
     {
-        var date = (day ?? DateTime.Today).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var date = (day ?? DateTime.Today).Date;
         using var connection = Database.Open();
         using var command = connection.CreateCommand();
         command.CommandText = """
@@ -347,12 +319,13 @@ public sealed class AppointmentService
             LEFT JOIN staff sp ON sp.id=a.specialist_id
             LEFT JOIN clinics c ON c.id=a.clinic_id
             WHERE a.deleted_utc IS NULL AND p.deleted_utc IS NULL
-              AND a.starts_at_local LIKE $day
+              AND a.starts_at_local >= $start AND a.starts_at_local < $end
               AND a.status <> 'cancelled'
               AND ($staff IS NULL OR a.staff_id=$staff OR a.doctor_id=$staff OR a.specialist_id=$staff)
             ORDER BY a.starts_at_local;
             """;
-        command.Parameters.AddWithValue("$day", date + "%");
+        command.Parameters.AddWithValue("$start", FormatLocal(date));
+        command.Parameters.AddWithValue("$end", FormatLocal(date.AddDays(1)));
         command.Parameters.AddWithValue("$staff", staffId is null ? DBNull.Value : staffId.Value);
         using var reader = command.ExecuteReader();
         var rows = new List<TodayRow>();
@@ -421,15 +394,21 @@ public sealed class AppointmentService
     }
 
     private static void EnsureClinicianSlotsFree(
-        SqliteConnection connection, DateTime startsAt, long? doctorId, long? specialistId, long? exceptAppointmentId)
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        DateTime startsAt,
+        long? doctorId,
+        long? specialistId,
+        long? exceptAppointmentId)
     {
         void Check(string column, long id, string label)
         {
             using var command = connection.CreateCommand();
+            command.Transaction = transaction;
             command.CommandText = $"""
                 SELECT 1 FROM appointments
-                WHERE deleted_utc IS NULL AND status <> 'cancelled'
-                  AND starts_at_local=$start AND ({column}=$sid OR staff_id=$sid)
+                WHERE deleted_utc IS NULL AND status='scheduled'
+                  AND starts_at_local=$start AND {column}=$sid
                   AND ($except IS NULL OR id <> $except)
                 LIMIT 1;
                 """;
@@ -443,6 +422,23 @@ public sealed class AppointmentService
         if (specialistId is long s) Check("specialist_id", s, "أخصائي");
     }
 
+    private static void EnsureCliniciansAreActive(
+        SqliteConnection connection, SqliteTransaction transaction, long? doctorId, long? specialistId)
+    {
+        void Check(long id, string role, string label)
+        {
+            using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = "SELECT 1 FROM staff WHERE id=$id AND role=$role AND is_active=1 LIMIT 1;";
+            command.Parameters.AddWithValue("$id", id);
+            command.Parameters.AddWithValue("$role", role);
+            if (command.ExecuteScalar() is null)
+                throw new InvalidOperationException($"ال{label} المحدد غير موجود أو غير نشط.");
+        }
+        if (doctorId is long doctor) Check(doctor, "doctor", "طبيب");
+        if (specialistId is long specialist) Check(specialist, "specialist", "أخصائي");
+    }
+
     public IReadOnlyList<Appointment> ListByFilter(AppointmentFilter filter)
     {
         using var connection = Database.Open();
@@ -450,7 +446,7 @@ public sealed class AppointmentService
         var now = DateTime.Now;
         var extra = filter switch
         {
-            AppointmentFilter.Today => " AND a.starts_at_local LIKE $a AND a.status <> 'cancelled' ",
+            AppointmentFilter.Today => " AND a.starts_at_local >= $a AND a.starts_at_local < $b AND a.status <> 'cancelled' ",
             AppointmentFilter.NextWeek => " AND a.starts_at_local >= $a AND a.starts_at_local < $b AND a.status='scheduled' ",
             AppointmentFilter.Missed => " AND a.status='missed' ",
             AppointmentFilter.Renewed => " AND IFNULL(a.kind,'regular')='renewed' AND a.status <> 'cancelled' ",
@@ -471,7 +467,10 @@ public sealed class AppointmentService
             """ + extra + " ORDER BY a.starts_at_local LIMIT 2000;";
 
         if (filter == AppointmentFilter.Today)
-            command.Parameters.AddWithValue("$a", now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "%");
+        {
+            command.Parameters.AddWithValue("$a", FormatLocal(now.Date));
+            command.Parameters.AddWithValue("$b", FormatLocal(now.Date.AddDays(1)));
+        }
         else if (filter == AppointmentFilter.NextWeek)
         {
             command.Parameters.AddWithValue("$a", now.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture));
@@ -543,13 +542,17 @@ public sealed class AppointmentService
             bind?.Invoke(command);
             return Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture);
         }
-        var today = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var today = DateTime.Today;
         var alertEnd = FormatLocal(DateTime.Now.AddDays(2));
         var inactive = DateTime.UtcNow.AddYears(-10).ToString("O", CultureInfo.InvariantCulture);
         return new DashboardSnapshot(
             Scalar(connection, "SELECT COUNT(*) FROM patients WHERE deleted_utc IS NULL;"),
-            Scalar(connection, "SELECT COUNT(*) FROM appointments WHERE deleted_utc IS NULL AND status='scheduled' AND starts_at_local LIKE $today;",
-                command => command.Parameters.AddWithValue("$today", today + "%")),
+            Scalar(connection, "SELECT COUNT(*) FROM appointments WHERE deleted_utc IS NULL AND status='scheduled' AND starts_at_local >= $today AND starts_at_local < $tomorrow;",
+                command =>
+                {
+                    command.Parameters.AddWithValue("$today", FormatLocal(today));
+                    command.Parameters.AddWithValue("$tomorrow", FormatLocal(today.AddDays(1)));
+                }),
             Scalar(connection, "SELECT COUNT(*) FROM appointments WHERE deleted_utc IS NULL AND status='scheduled' AND starts_at_local BETWEEN $now AND $end;",
                 command =>
                 {

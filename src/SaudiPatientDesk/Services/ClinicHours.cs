@@ -64,14 +64,6 @@ public sealed class ClinicHours
         return t >= BreakStart && t < BreakEnd;
     }
 
-    public bool IsWithinHours(DateTime local)
-    {
-        var t = local.TimeOfDay;
-        if (t < Start || t >= End) return false;
-        if (IsOnBreak(local)) return false;
-        return true;
-    }
-
     public string? ValidateAppointmentTime(DateTime local)
     {
         if (IsOnBreak(local))
@@ -99,14 +91,6 @@ public sealed class ClinicHours
         BreakEnabled
             ? $"{TimeDisplay.Format12(BreakStart)} – {TimeDisplay.Format12(BreakEnd)}"
             : "غير مفعّلة";
-
-    public static IReadOnlyList<string> FineMinuteOptions()
-    {
-        var list = new List<string>();
-        for (var m = 0; m < 60; m += 5)
-            list.Add(m.ToString("00", CultureInfo.InvariantCulture));
-        return list;
-    }
 
     public static string Format(TimeSpan t) =>
         $"{(int)t.TotalHours:00}:{t.Minutes:00}";

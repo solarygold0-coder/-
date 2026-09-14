@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using System.Globalization;
+using System.IO;
 using System.Text.RegularExpressions;
 using SaudiPatientDesk.Data;
 using SaudiPatientDesk.Domain;
@@ -77,7 +78,7 @@ public sealed class PatientService
         EnsureNoDuplicate(connection, transaction, draft.NationalId, draft.Mobile, null);
         EnsureFileNumberAvailable(connection, transaction, fileNumber, null);
 
-        var now = DateTime.UtcNow.ToString("O");
+        var now = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
@@ -94,7 +95,14 @@ public sealed class PatientService
         command.Parameters.AddWithValue("$file", fileNumber);
         BindDraft(command, draft);
         command.Parameters.AddWithValue("$now", now);
-        command.ExecuteScalar();
+        try
+        {
+            command.ExecuteScalar();
+        }
+        catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
+        {
+            throw MapConstraint(ex, fileNumber);
+        }
         transaction.Commit();
         Database.Log("patient.add", fileNumber);
         return FindByFileNumber(fileNumber) ?? throw new InvalidOperationException("تعذر قراءة السجل بعد حفظه.");
@@ -127,10 +135,17 @@ public sealed class PatientService
             """;
         command.Parameters.AddWithValue("$file", fileNumber);
         BindDraft(command, draft);
-        command.Parameters.AddWithValue("$now", DateTime.UtcNow.ToString("O"));
+        command.Parameters.AddWithValue("$now", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$id", id);
-        if (command.ExecuteNonQuery() != 1)
-            throw new InvalidOperationException("السجل غير موجود.");
+        try
+        {
+            if (command.ExecuteNonQuery() != 1)
+                throw new InvalidOperationException("السجل غير موجود.");
+        }
+        catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
+        {
+            throw MapConstraint(ex, fileNumber);
+        }
         transaction.Commit();
         Database.Log("patient.update", fileNumber);
     }
@@ -139,7 +154,16 @@ public sealed class PatientService
     {
         using var connection = Database.Open();
         using var transaction = connection.BeginTransaction();
-        var now = DateTime.UtcNow.ToString("O");
+        var now = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+        var storedNames = new List<string>();
+        using (var stored = connection.CreateCommand())
+        {
+            stored.Transaction = transaction;
+            stored.CommandText = "SELECT stored_name FROM attachments WHERE patient_id=$id AND deleted_utc IS NULL;";
+            stored.Parameters.AddWithValue("$id", id);
+            using var reader = stored.ExecuteReader();
+            while (reader.Read()) storedNames.Add(reader.GetString(0));
+        }
 
         using (var cancel = connection.CreateCommand())
         {
@@ -179,7 +203,24 @@ public sealed class PatientService
         }
 
 
+        ClinicService.ReleaseUnusedClinicDays(connection, transaction);
         transaction.Commit();
+
+        foreach (var storedName in storedNames)
+        {
+            try
+            {
+                var safeName = Path.GetFileName(storedName);
+                if (!string.Equals(safeName, storedName, StringComparison.Ordinal))
+                    throw new InvalidOperationException("اسم ملف مرفق غير آمن.");
+                var path = Path.Combine(AppPaths.Attachments, safeName);
+                if (File.Exists(path)) File.Delete(path);
+            }
+            catch (Exception ex)
+            {
+                try { Database.Log("attachment.cleanup.warning", ex.Message); } catch { }
+            }
+        }
         Database.Log("patient.delete", id.ToString());
     }
 
@@ -193,8 +234,11 @@ public sealed class PatientService
     {
         using var command = connection.CreateCommand();
         if (transaction is not null) command.Transaction = transaction;
-        command.CommandText =
-            "SELECT file_number FROM patients WHERE file_number GLOB '[A-Z]*-[0-9][0-9][0-9][0-9]';";
+        command.CommandText = """
+            SELECT file_number FROM patients
+            WHERE length(file_number) BETWEEN 6 AND 8
+              AND file_number GLOB '[A-Z]*-[0-9][0-9][0-9][0-9]';
+            """;
 
         string bestPrefix = "A";
         int bestNumber = 0;
@@ -224,6 +268,8 @@ public sealed class PatientService
         if (bestNumber < 9999)
             return $"{bestPrefix}-{(bestNumber + 1).ToString("D4", CultureInfo.InvariantCulture)}";
 
+        if (bestPrefix == "ZZZ")
+            throw new InvalidOperationException("تم استنفاد نطاق أرقام الملفات المتاح حتى ZZZ-9999.");
         return $"{IncrementPrefix(bestPrefix)}-0001";
     }
 
@@ -301,6 +347,18 @@ public sealed class PatientService
         command.Parameters.AddWithValue("$chronic", (object?)draft.ChronicDiseases?.Trim() ?? DBNull.Value);
         command.Parameters.AddWithValue("$meds", (object?)draft.CurrentMedications?.Trim() ?? DBNull.Value);
         command.Parameters.AddWithValue("$allergies", (object?)draft.DrugAllergies?.Trim() ?? DBNull.Value);
+    }
+
+    private static InvalidOperationException MapConstraint(SqliteException exception, string fileNumber)
+    {
+        var message = exception.Message;
+        if (message.Contains("file_number", StringComparison.OrdinalIgnoreCase))
+            return new InvalidOperationException($"رقم الملف «{fileNumber}» مستخدم مسبقاً أو لا يطابق الشكل A-0001.", exception);
+        if (message.Contains("national_id", StringComparison.OrdinalIgnoreCase))
+            return new InvalidOperationException("رقم الهوية مسجل لمريض نشط آخر.", exception);
+        if (message.Contains("mobile", StringComparison.OrdinalIgnoreCase))
+            return new InvalidOperationException("رقم الجوال مسجل لمريض نشط آخر.", exception);
+        return new InvalidOperationException("تعذر حفظ المريض بسبب قيمة مكررة أو غير صالحة.", exception);
     }
 
     private static Patient ReadPatient(SqliteDataReader reader) => new(

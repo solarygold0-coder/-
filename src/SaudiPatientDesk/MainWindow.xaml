@@ -5,13 +5,13 @@
         Icon="Assets/AppIcon.ico"
         MinWidth="1120" MinHeight="700" WindowStartupLocation="CenterScreen"
         FlowDirection="RightToLeft" Language="ar-SA">
-  <Grid>
+  <Grid FlowDirection="LeftToRight">
     <Grid.ColumnDefinitions>
-      <ColumnDefinition Width="260"/>
       <ColumnDefinition Width="*"/>
+      <ColumnDefinition Width="260"/>
     </Grid.ColumnDefinitions>
 
-    <Border Grid.Column="0" Background="#102A43">
+    <Border Grid.Column="1" Background="#102A43" FlowDirection="RightToLeft">
       <Grid Margin="22">
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto"/>
@@ -46,7 +46,7 @@
       </Grid>
     </Border>
 
-    <Grid Grid.Column="1" Margin="34,24,34,30">
+    <Grid Grid.Column="0" Margin="34,24,34,30" FlowDirection="RightToLeft">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="22"/>
@@ -70,6 +70,10 @@
         <Grid x:Name="DashboardPanel">
           <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="22"/><RowDefinition Height="*"/></Grid.RowDefinitions>
           <StackPanel>
+            <Border x:Name="BackupWarningBanner" Visibility="Collapsed" Background="#FFF3CD" BorderBrush="#E6B800"
+                    BorderThickness="1" CornerRadius="10" Padding="12" Margin="7,0,7,12">
+              <TextBlock x:Name="BackupWarningText" TextWrapping="Wrap" Foreground="#7A5200"/>
+            </Border>
             <UniformGrid Columns="4" Rows="1">
               <Border Style="{StaticResource MetricCard}" BorderBrush="#D7EFEA">
                 <StackPanel><TextBlock Text="إجمالي المرضى" Style="{StaticResource MetricLabel}"/><TextBlock x:Name="PatientsCount" Text="0" Style="{StaticResource MetricValue}" Foreground="#0B7A75"/></StackPanel>
@@ -149,7 +153,6 @@
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
               </ScrollViewer>
-              <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,80,0,0" IsHitTestVisible="False" Visibility="Collapsed"/>
               <Grid Grid.Row="4">
                 <Grid.RowDefinitions>
                   <RowDefinition Height="Auto"/>
@@ -200,7 +203,6 @@
                     </DataGridTemplateColumn>
                   </DataGrid.Columns>
                 </DataGrid>
-                <DataGrid x:Name="DashboardAppointmentsGrid" Visibility="Collapsed"/>
               </Grid>
             </Grid>
           </Border>
@@ -287,6 +289,10 @@
             <StackPanel>
               <TextBlock Text="إعدادات المنشأة" FontSize="22" FontWeight="Bold"/>
               <TextBlock Text="تُحفظ هذه الخيارات وتبقى بعد إغلاق البرنامج." Foreground="{StaticResource MutedBrush}" Margin="0,6,0,0"/>
+              <Border x:Name="FirstRunHint" Visibility="Collapsed" Background="#E8F5E9" BorderBrush="#A5D6A7"
+                      BorderThickness="1" CornerRadius="10" Padding="12" Margin="0,12,0,0">
+                <TextBlock Text="إعداد أول تشغيل: أضف عيادة واحدة على الأقل وطبيباً أو أخصائياً، ثم يمكنك إنشاء المواعيد." TextWrapping="Wrap" Foreground="#215E2D"/>
+              </Border>
             </StackPanel>
             <StackPanel Grid.Row="2">
               <TextBlock Text="اسم العيادة أو المنشأة" Margin="0,0,0,7"/>
@@ -383,19 +389,43 @@
                   </ComboBox>
                 </StackPanel>
               </Grid>
+              <TextBlock Text="أيام الإغلاق الأسبوعي" Margin="0,18,0,7" FontWeight="SemiBold"/>
+              <TextBlock Text="يمكن تغيير عطلة نهاية الأسبوع حسب عمل المنشأة." Foreground="{StaticResource MutedBrush}" Margin="0,0,0,8"/>
+              <WrapPanel FlowDirection="RightToLeft" HorizontalAlignment="Right">
+                <CheckBox x:Name="ClosedSundayBox" Content="الأحد" Margin="12,4"/>
+                <CheckBox x:Name="ClosedMondayBox" Content="الاثنين" Margin="12,4"/>
+                <CheckBox x:Name="ClosedTuesdayBox" Content="الثلاثاء" Margin="12,4"/>
+                <CheckBox x:Name="ClosedWednesdayBox" Content="الأربعاء" Margin="12,4"/>
+                <CheckBox x:Name="ClosedThursdayBox" Content="الخميس" Margin="12,4"/>
+                <CheckBox x:Name="ClosedFridayBox" Content="الجمعة" Margin="12,4"/>
+                <CheckBox x:Name="ClosedSaturdayBox" Content="السبت" Margin="12,4"/>
+              </WrapPanel>
               <Button Style="{StaticResource PrimaryButton}" Width="150" HorizontalAlignment="Right" Margin="0,16,0,0" Click="SaveSettings_Click" Content="حفظ الإعدادات"/>
             </StackPanel>
             <Border Grid.Row="4" Background="#F4F7FB" CornerRadius="12" Padding="18" Margin="0,0,0,16">
               <StackPanel>
-                <TextBlock Text="الأطباء والأخصائيون المعالجون (7)" FontSize="18" FontWeight="SemiBold"/>
-                <TextBlock Text="يمكن تعديل الأسماء. المواعيد تُربط بالمعالج المختار ويظهر جدوله في التايم لاين." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,6,0,10"/>
+                <TextBlock Text="الأطباء والأخصائيون المعالجون" FontSize="18" FontWeight="SemiBold"/>
+                <TextBlock Text="تبدأ القائمة فارغة. أضف المعالجين الفعليين ثم عدّل أسماءهم أو عطّلهم عند الحاجة." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,6,0,10"/>
                 <DataGrid x:Name="StaffGrid" Height="170" AutoGenerateColumns="False" CanUserAddRows="False">
                   <DataGrid.Columns>
                     <DataGridTextColumn Header="الاسم" Binding="{Binding FullName}" Width="*"/>
                     <DataGridTextColumn Header="الصفة" Binding="{Binding RoleDisplay}" Width="140" IsReadOnly="True"/>
+                    <DataGridTextColumn Header="الحالة" Binding="{Binding StatusDisplay}" Width="100" IsReadOnly="True"/>
                   </DataGrid.Columns>
                 </DataGrid>
-                <Button Style="{StaticResource SecondaryButton}" Width="160" HorizontalAlignment="Right" Margin="0,10,0,0" Content="حفظ أسماء المعالجين" Click="SaveStaffNames_Click"/>
+                <TextBlock Text="اسم المعالج الجديد وصفته" Margin="0,10,0,4" Foreground="{StaticResource MutedBrush}"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                  <TextBox x:Name="NewStaffNameBox" Width="230" Margin="0,0,8,0"/>
+                  <ComboBox x:Name="NewStaffRoleBox" Width="130" SelectedIndex="0" Margin="0,0,8,0">
+                    <ComboBoxItem Content="طبيب" Tag="doctor"/>
+                    <ComboBoxItem Content="أخصائي" Tag="specialist"/>
+                  </ComboBox>
+                  <Button x:Name="AddStaffButton" Style="{StaticResource PrimaryButton}" Content="＋ إضافة معالج" Click="AddStaff_Click"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                  <Button Style="{StaticResource SecondaryButton}" Content="حفظ الأسماء" Click="SaveStaffNames_Click"/>
+                  <Button Style="{StaticResource SecondaryButton}" Content="تفعيل/تعطيل المحدد" Margin="8,0,0,0" Click="ToggleStaffActive_Click"/>
+                </StackPanel>
                 <TextBlock x:Name="SettingsClinicUsageText" Text="عيادات اليوم: 0 / 10" Foreground="#275DAD" FontWeight="SemiBold" Margin="0,16,0,4"/>
                 <TextBlock Text="العيادات (حد أقصى 10 في نفس اليوم)" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,6"/>
                 <DataGrid x:Name="ClinicsGrid" Height="120" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True">
@@ -403,9 +433,10 @@
                     <DataGridTextColumn Header="اسم العيادة" Binding="{Binding Name}" Width="*"/>
                   </DataGrid.Columns>
                 </DataGrid>
+                <TextBlock Text="اسم العيادة الجديدة" Margin="0,8,0,4" Foreground="{StaticResource MutedBrush}"/>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
                   <TextBox x:Name="NewClinicNameBox" Width="200" Margin="0,0,8,0"/>
-                  <Button Style="{StaticResource SecondaryButton}" Content="إضافة عيادة" Click="AddClinic_Click"/>
+                  <Button x:Name="AddClinicButton" Style="{StaticResource PrimaryButton}" Content="＋ إضافة عيادة" Click="AddClinic_Click"/>
                   <Button Style="{StaticResource SecondaryButton}" Content="حذف العيادة المحددة" Margin="8,0,0,0" Click="DeleteClinic_Click"/>
                 </StackPanel>
               </StackPanel>
@@ -444,7 +475,7 @@
     </Grid>
 
     <!-- جميع النماذج داخل النافذة الرئيسية: لا توجد نافذة تطبيق ثانية. -->
-    <Grid x:Name="PatientFormOverlay" Grid.ColumnSpan="2" Visibility="Collapsed" Background="#990B1725" Panel.ZIndex="20">
+    <Grid x:Name="PatientFormOverlay" Grid.ColumnSpan="2" Visibility="Collapsed" Background="#990B1725" Panel.ZIndex="20" FlowDirection="RightToLeft">
       <Border Width="720" MaxHeight="790" Background="White" CornerRadius="20" Padding="30" HorizontalAlignment="Center" VerticalAlignment="Center">
         <Grid>
           <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="18"/><RowDefinition Height="*"/><RowDefinition Height="18"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -527,7 +558,7 @@
       </Border>
     </Grid>
 
-    <Grid x:Name="AppointmentFormOverlay" Grid.ColumnSpan="2" Visibility="Collapsed" Background="#990B1725" Panel.ZIndex="20">
+    <Grid x:Name="AppointmentFormOverlay" Grid.ColumnSpan="2" Visibility="Collapsed" Background="#990B1725" Panel.ZIndex="20" FlowDirection="RightToLeft">
       <Border Width="900" MaxHeight="850" Background="White" CornerRadius="20" Padding="30" HorizontalAlignment="Center" VerticalAlignment="Center">
         <Grid>
           <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="16"/><RowDefinition Height="*"/><RowDefinition Height="16"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -541,7 +572,6 @@
               <ComboBox x:Name="AppointmentDoctorBox" DisplayMemberPath="Display" SelectedValuePath="Id" SelectionChanged="AppointmentTime_SelectionChanged"/>
               <TextBlock Text="الأخصائي المعالج (اختياري إن وُجد طبيب)" Margin="0,12,0,6"/>
               <ComboBox x:Name="AppointmentSpecialistBox" DisplayMemberPath="Display" SelectedValuePath="Id" SelectionChanged="AppointmentTime_SelectionChanged"/>
-              <ComboBox x:Name="AppointmentStaffBox" Visibility="Collapsed" DisplayMemberPath="Display" SelectedValuePath="Id"/>
               <CheckBox x:Name="AppointmentRenewedBox" Content="موعد مجدّد / متابعة" Margin="0,12,0,0" HorizontalAlignment="Right"/>
               <Border Background="#F4F7FB" CornerRadius="12" Padding="15" Margin="0,9,0,16" FlowDirection="RightToLeft">
                 <Grid>

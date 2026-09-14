@@ -1,13 +1,15 @@
 using Microsoft.Data.Sqlite;
 using System.Globalization;
 using System.IO;
+using System.Text.RegularExpressions;
 using SaudiPatientDesk;
 
 namespace SaudiPatientDesk.Data;
 
 public static class Database
 {
-    private const int SupportedSchemaVersion = 5;
+    private const int SupportedSchemaVersion = 6;
+    public static string? LastBackupWarning { get; private set; }
 
     public static SqliteConnection Open()
         => OpenDatabase(AppPaths.DatabaseFile, SqliteOpenMode.ReadWriteCreate, foreignKeys: true);
@@ -61,29 +63,37 @@ public static class Database
 
     public static void BackupNow()
     {
+        AppPaths.EnsureCreated();
+        if (!File.Exists(AppPaths.DatabaseFile)) return;
+        using (var connection = Open())
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
+            command.ExecuteNonQuery();
+        }
+        var name = "auto-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + ".sqlite3";
+        File.Copy(AppPaths.DatabaseFile, Path.Combine(AppPaths.Backups, name), overwrite: true);
+        var old = Directory.GetFiles(AppPaths.Backups, "auto-*.sqlite3")
+            .Select(f => new FileInfo(f))
+            .OrderByDescending(f => f.CreationTimeUtc)
+            .Skip(7);
+        foreach (var file in old)
+        {
+            try { file.Delete(); } catch { }
+        }
+    }
+
+    private static void TryStartupBackup()
+    {
+        LastBackupWarning = null;
         try
         {
-            AppPaths.EnsureCreated();
-            if (!File.Exists(AppPaths.DatabaseFile)) return;
-            using (var connection = Open())
-            using (var command = connection.CreateCommand())
-            {
-                command.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
-                command.ExecuteNonQuery();
-            }
-            var name = "auto-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + ".sqlite3";
-            File.Copy(AppPaths.DatabaseFile, Path.Combine(AppPaths.Backups, name), overwrite: true);
-            var old = Directory.GetFiles(AppPaths.Backups, "auto-*.sqlite3")
-                .Select(f => new FileInfo(f))
-                .OrderByDescending(f => f.CreationTimeUtc)
-                .Skip(7);
-            foreach (var file in old)
-            {
-                try { file.Delete(); } catch { }
-            }
+            BackupNow();
         }
-        catch
+        catch (Exception ex)
         {
+            LastBackupWarning = "تعذر إنشاء النسخة الاحتياطية التلقائية. يمكنك متابعة العمل ثم إنشاء نسخة من الإعدادات.";
+            try { Log("backup.warning", ex.Message); } catch { }
         }
     }
 
@@ -93,7 +103,7 @@ public static class Database
         {
             RebuildLegacyDatabase(new InvalidOperationException("اختبار استعادة قاعدة إصدار سابق."));
             InitializeCore(AppPaths.DatabaseFile);
-            BackupNow();
+            TryStartupBackup();
             return;
         }
 
@@ -106,7 +116,7 @@ public static class Database
             RebuildLegacyDatabase(ex);
             InitializeCore(AppPaths.DatabaseFile);
         }
-        BackupNow();
+        TryStartupBackup();
     }
 
     private static void InitializeCore(string databaseFile)
@@ -124,7 +134,7 @@ public static class Database
             );
 
             INSERT INTO schema_info(version, created_utc)
-            SELECT 5, strftime('%Y-%m-%dT%H:%M:%fZ','now')
+            SELECT 6, strftime('%Y-%m-%dT%H:%M:%fZ','now')
             WHERE NOT EXISTS (SELECT 1 FROM schema_info);
 
             CREATE TABLE IF NOT EXISTS app_settings (
@@ -144,7 +154,13 @@ public static class Database
             CREATE TABLE IF NOT EXISTS patients (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 file_number TEXT NOT NULL UNIQUE
-                    CHECK(file_number GLOB '[A-Z]*-[0-9][0-9][0-9][0-9]'),
+                    CHECK(
+                      length(file_number) BETWEEN 6 AND 8
+                      AND instr(file_number, '-') BETWEEN 2 AND 4
+                      AND substr(file_number, 1, instr(file_number, '-') - 1) NOT GLOB '*[^A-Z]*'
+                      AND length(substr(file_number, instr(file_number, '-') + 1)) = 4
+                      AND substr(file_number, instr(file_number, '-') + 1) NOT GLOB '*[^0-9]*'
+                    ),
                 full_name TEXT NOT NULL CHECK(length(trim(full_name)) >= 3),
                 national_id TEXT NOT NULL
                     CHECK(national_id NOT GLOB '*[^0-9]*' AND length(national_id) = 10),
@@ -231,6 +247,14 @@ public static class Database
             BEGIN
                 SELECT RAISE(ABORT, 'clinic_daily_limit');
             END;
+
+            CREATE TRIGGER IF NOT EXISTS trg_clinic_daily_limit_update
+            BEFORE UPDATE OF open_date ON clinic_open_days
+            WHEN NEW.open_date <> OLD.open_date
+              AND (SELECT COUNT(*) FROM clinic_open_days WHERE open_date=NEW.open_date) >= 10
+            BEGIN
+                SELECT RAISE(ABORT, 'clinic_daily_limit');
+            END;
             """;
         command.ExecuteNonQuery();
 
@@ -250,6 +274,7 @@ public static class Database
         SeedSetting(connection, "break_end", "12:55");
         SeedSetting(connection, "break_enabled", "1");
         SeedSetting(connection, "ui_language", "ar");
+        SeedSetting(connection, "weekly_closed_days", "Friday,Saturday");
 
         EnsureColumn(connection, "appointments", "staff_id", "INTEGER");
         EnsureColumn(connection, "appointments", "doctor_id", "INTEGER");
@@ -257,6 +282,11 @@ public static class Database
         EnsureColumn(connection, "appointments", "clinic_id", "INTEGER");
         EnsureColumn(connection, "appointments", "kind", "TEXT NOT NULL DEFAULT 'regular'");
         EnsureColumn(connection, "appointments", "visit_stage", "TEXT NOT NULL DEFAULT ''");
+        BackfillClinicianColumns(connection);
+        if (ReadSchemaVersion(connection) < 6)
+            RemoveUnusedLegacySeeds(connection);
+        ResolveDuplicateActivePatients(connection);
+        CleanupClinicOpenDays(connection);
         using (var drop = connection.CreateCommand())
         {
             drop.CommandText = """
@@ -297,10 +327,8 @@ public static class Database
             indexes.ExecuteNonQuery();
         }
 
-        SeedDefaultStaff(connection);
-        SeedDefaultClinics(connection);
         using var version = connection.CreateCommand();
-        version.CommandText = "UPDATE schema_info SET version=5;";
+        version.CommandText = "UPDATE schema_info SET version=6;";
         version.ExecuteNonQuery();
     }
 
@@ -312,6 +340,14 @@ public static class Database
             integrity.CommandText = "PRAGMA quick_check;";
             if (!string.Equals(integrity.ExecuteScalar()?.ToString(), "ok", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("فشل فحص سلامة قاعدة البيانات.");
+        }
+
+        using (var foreignKeys = connection.CreateCommand())
+        {
+            foreignKeys.CommandText = "PRAGMA foreign_key_check;";
+            using var invalid = foreignKeys.ExecuteReader();
+            if (invalid.Read())
+                throw new InvalidOperationException("فشل فحص العلاقات بين جداول قاعدة البيانات.");
         }
 
         using var schema = connection.CreateCommand();
@@ -327,48 +363,13 @@ public static class Database
 
 
 
-    private static void SeedDefaultStaff(SqliteConnection connection)
-    {
-        using var count = connection.CreateCommand();
-        count.CommandText = "SELECT COUNT(*) FROM staff;";
-        if (Convert.ToInt32(count.ExecuteScalar()) > 0) return;
-
-        var seed = new (string Name, string Role)[]
-        {
-            ("طبيب عام", "doctor"),
-            ("طبيب أسنان", "doctor"),
-            ("طبيب باطنة", "doctor"),
-            ("طبيب أطفال", "doctor"),
-            ("أخصائي علاج طبيعي", "specialist"),
-            ("أخصائي تغذية علاجية", "specialist"),
-            ("أخصائي نطق وسمع", "specialist"),
-        };
-        foreach (var (name, role) in seed)
-        {
-            using var ins = connection.CreateCommand();
-            ins.CommandText = "INSERT INTO staff(full_name, role, is_active) VALUES($n,$r,1);";
-            ins.Parameters.AddWithValue("$n", name);
-            ins.Parameters.AddWithValue("$r", role);
-            ins.ExecuteNonQuery();
-        }
-    }
-
     private static void MigratePatientFileNumbersToCodes(SqliteConnection connection)
     {
         using var schema = connection.CreateCommand();
-        schema.CommandText = "PRAGMA table_info(patients);";
-        using var schemaReader = schema.ExecuteReader();
-        var fileNumberType = string.Empty;
-        while (schemaReader.Read())
-        {
-            if (string.Equals(schemaReader.GetString(1), "file_number", StringComparison.OrdinalIgnoreCase))
-            {
-                fileNumberType = schemaReader.IsDBNull(2) ? string.Empty : schemaReader.GetString(2);
-                break;
-            }
-        }
-        schemaReader.Close();
-        if (fileNumberType.Contains("TEXT", StringComparison.OrdinalIgnoreCase)) return;
+        schema.CommandText = "SELECT IFNULL(sql,'') FROM sqlite_master WHERE type='table' AND name='patients';";
+        var tableSql = schema.ExecuteScalar()?.ToString() ?? string.Empty;
+        if (tableSql.Contains("instr(file_number, '-') BETWEEN 2 AND 4", StringComparison.OrdinalIgnoreCase))
+            return;
 
         var rows = new List<LegacyPatientRow>();
         using (var read = connection.CreateCommand())
@@ -384,7 +385,7 @@ public static class Database
             while (reader.Read())
             {
                 rows.Add(new LegacyPatientRow(
-                    reader.GetInt64(0), Convert.ToInt32(reader.GetValue(1), CultureInfo.InvariantCulture),
+                    reader.GetInt64(0), reader.GetValue(1),
                     reader.GetString(2), reader.GetString(3), reader.GetString(4),
                     reader.IsDBNull(5) ? null : reader.GetString(5),
                     reader.IsDBNull(6) ? null : reader.GetString(6), reader.GetString(7),
@@ -415,7 +416,14 @@ public static class Database
                     DROP TABLE IF EXISTS patients_codes;
                     CREATE TABLE patients_codes (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        file_number TEXT NOT NULL UNIQUE,
+                        file_number TEXT NOT NULL UNIQUE
+                            CHECK(
+                              length(file_number) BETWEEN 6 AND 8
+                              AND instr(file_number, '-') BETWEEN 2 AND 4
+                              AND substr(file_number, 1, instr(file_number, '-') - 1) NOT GLOB '*[^A-Z]*'
+                              AND length(substr(file_number, instr(file_number, '-') + 1)) = 4
+                              AND substr(file_number, instr(file_number, '-') + 1) NOT GLOB '*[^0-9]*'
+                            ),
                         full_name TEXT NOT NULL CHECK(length(trim(full_name)) >= 3),
                         national_id TEXT NOT NULL CHECK(national_id NOT GLOB '*[^0-9]*' AND length(national_id) = 10),
                         mobile TEXT NOT NULL CHECK(mobile NOT GLOB '*[^0-9]*' AND length(mobile) BETWEEN 9 AND 10),
@@ -436,6 +444,8 @@ public static class Database
                 create.ExecuteNonQuery();
             }
 
+            var usedCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var nextSequence = 1;
             foreach (var row in rows)
             {
                 using var insert = connection.CreateCommand();
@@ -450,7 +460,7 @@ public static class Database
                       $blood,$chronic,$medications,$allergies,$created,$updated,$activity,$deleted);
                     """;
                 insert.Parameters.AddWithValue("$id", row.Id);
-                insert.Parameters.AddWithValue("$file", LegacyFileCode(row.LegacyFileNumber));
+                insert.Parameters.AddWithValue("$file", NormalizeLegacyFileCode(row.LegacyFileNumber, usedCodes, ref nextSequence));
                 insert.Parameters.AddWithValue("$name", row.FullName);
                 insert.Parameters.AddWithValue("$national", row.NationalId);
                 insert.Parameters.AddWithValue("$mobile", row.Mobile);
@@ -478,7 +488,6 @@ public static class Database
                     CREATE INDEX IF NOT EXISTS ix_patients_national ON patients(national_id);
                     CREATE INDEX IF NOT EXISTS ix_patients_name ON patients(full_name);
                     CREATE INDEX IF NOT EXISTS ix_patients_mobile ON patients(mobile);
-                    UPDATE schema_info SET version=5;
                     """;
                 replace.ExecuteNonQuery();
             }
@@ -528,25 +537,29 @@ public static class Database
         return $"{new string(buffer[position..])}-{suffix:0000}";
     }
 
+    private static string NormalizeLegacyFileCode(object value, HashSet<string> used, ref int nextSequence)
+    {
+        var text = Convert.ToString(value, CultureInfo.InvariantCulture)?.Trim().ToUpperInvariant() ?? string.Empty;
+        if (Regex.IsMatch(text, "^[A-Z]{1,3}-[0-9]{4}$", RegexOptions.CultureInvariant) && used.Add(text))
+            return text;
+
+        if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var numeric))
+        {
+            var candidate = LegacyFileCode(numeric);
+            if (used.Add(candidate)) return candidate;
+        }
+
+        while (!used.Add(LegacyFileCode(nextSequence))) nextSequence++;
+        return LegacyFileCode(nextSequence++);
+    }
+
     private static object DbValue(string? value) => value is null ? DBNull.Value : value;
 
     private sealed record LegacyPatientRow(
-        long Id, int LegacyFileNumber, string FullName, string NationalId, string Mobile,
+        long Id, object LegacyFileNumber, string FullName, string NationalId, string Mobile,
         string? SecondaryContact, string? BriefMedicalInfo, string Gender, string? ResidencyNumber,
         string? BloodType, string? ChronicDiseases, string? CurrentMedications, string? DrugAllergies,
         string CreatedUtc, string UpdatedUtc, string LastActivityUtc, string? DeletedUtc);
-
-    private static void SeedDefaultClinics(SqliteConnection connection)
-    {
-        using var count = connection.CreateCommand();
-        count.CommandText = "SELECT COUNT(*) FROM clinics WHERE deleted_utc IS NULL;";
-        if (Convert.ToInt32(count.ExecuteScalar()) > 0) return;
-
-        using var insert = connection.CreateCommand();
-        insert.CommandText = "INSERT INTO clinics(full_name, is_active) VALUES($name, 1);";
-        insert.Parameters.AddWithValue("$name", "العيادة الرئيسية");
-        insert.ExecuteNonQuery();
-    }
 
     private static void SeedSetting(SqliteConnection connection, string key, string value)
     {
@@ -557,7 +570,7 @@ public static class Database
             """;
         command.Parameters.AddWithValue("$key", key);
         command.Parameters.AddWithValue("$value", value);
-        command.Parameters.AddWithValue("$now", DateTime.UtcNow.ToString("O"));
+        command.Parameters.AddWithValue("$now", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
         command.ExecuteNonQuery();
     }
 
@@ -575,12 +588,64 @@ public static class Database
                  AND a.starts_at_local = b.starts_at_local
                  AND (
                       (a.doctor_id IS NOT NULL AND a.doctor_id = b.doctor_id) OR
-                      (a.specialist_id IS NOT NULL AND a.specialist_id = b.specialist_id) OR
-                      (a.staff_id IS NOT NULL AND a.staff_id = b.staff_id)
+                      (a.specialist_id IS NOT NULL AND a.specialist_id = b.specialist_id)
                  )
               );
             """;
         command.Parameters.AddWithValue("$now", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+        command.ExecuteNonQuery();
+    }
+
+    private static void BackfillClinicianColumns(SqliteConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE appointments
+            SET doctor_id=staff_id
+            WHERE doctor_id IS NULL AND specialist_id IS NULL AND staff_id IN (
+              SELECT id FROM staff WHERE role='doctor'
+            );
+            UPDATE appointments
+            SET specialist_id=staff_id
+            WHERE doctor_id IS NULL AND specialist_id IS NULL AND staff_id IN (
+              SELECT id FROM staff WHERE role='specialist'
+            );
+            UPDATE appointments
+            SET staff_id=COALESCE(doctor_id, specialist_id)
+            WHERE staff_id IS NULL AND COALESCE(doctor_id, specialist_id) IS NOT NULL;
+            """;
+        command.ExecuteNonQuery();
+    }
+
+    private static int ReadSchemaVersion(SqliteConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COALESCE(MAX(version),0) FROM schema_info;";
+        return Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture);
+    }
+
+    private static void RemoveUnusedLegacySeeds(SqliteConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            DELETE FROM staff
+            WHERE full_name IN (
+              'طبيب عام','طبيب أسنان','طبيب باطنة','طبيب أطفال',
+              'أخصائي علاج طبيعي','أخصائي تغذية علاجية','أخصائي نطق وسمع'
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM appointments a
+              WHERE a.staff_id=staff.id OR a.doctor_id=staff.id OR a.specialist_id=staff.id
+            );
+            DELETE FROM clinic_open_days
+            WHERE clinic_id IN (
+              SELECT id FROM clinics c WHERE c.full_name='العيادة الرئيسية'
+                AND NOT EXISTS (SELECT 1 FROM appointments a WHERE a.clinic_id=c.id)
+            );
+            DELETE FROM clinics
+            WHERE full_name='العيادة الرئيسية'
+              AND NOT EXISTS (SELECT 1 FROM appointments a WHERE a.clinic_id=clinics.id);
+            """;
         command.ExecuteNonQuery();
     }
 
@@ -634,6 +699,7 @@ public static class Database
             CreateSafetyBackup(AppPaths.DatabaseFile, safetyBackup);
             InitializeCore(rebuilt);
             CopyRecoverableData(AppPaths.DatabaseFile, rebuilt);
+            ResolveRecoveredDuplicatePatients(rebuilt);
             InitializeCore(rebuilt);
             VerifyDatabase(rebuilt);
             ReplaceDatabaseWithRebuiltCopy(rebuilt, quarantine);
@@ -687,6 +753,8 @@ public static class Database
                 DROP INDEX IF EXISTS ux_appointments_active_specialist;
                 DROP INDEX IF EXISTS ux_patients_national_active;
                 DROP INDEX IF EXISTS ux_patients_mobile_active;
+                DROP TRIGGER IF EXISTS trg_clinic_daily_limit;
+                DROP TRIGGER IF EXISTS trg_clinic_daily_limit_update;
                 """;
             prepare.ExecuteNonQuery();
         }
@@ -727,6 +795,8 @@ public static class Database
         using var read = source.CreateCommand();
         read.CommandText = $"SELECT {quotedColumns} FROM {QuoteIdentifier(table)};";
         using var reader = read.ExecuteReader();
+        var usedFileCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var nextFileSequence = 1;
         while (reader.Read())
         {
             using var insert = destination.CreateCommand();
@@ -737,12 +807,61 @@ public static class Database
             for (var index = 0; index < columns.Length; index++)
             {
                 object value = reader.IsDBNull(index) ? DBNull.Value : reader.GetValue(index);
-                if (table == "patients" && columns[index] == "file_number" && value is not string)
-                    value = LegacyFileCode(Convert.ToInt32(value, CultureInfo.InvariantCulture));
+                if (table == "patients" && columns[index] == "file_number")
+                    value = NormalizeLegacyFileCode(value, usedFileCodes, ref nextFileSequence);
                 insert.Parameters.AddWithValue($"$v{index}", value);
             }
             insert.ExecuteNonQuery();
         }
+    }
+
+    private static void ResolveRecoveredDuplicatePatients(string databaseFile)
+    {
+        using var connection = OpenDatabase(databaseFile, SqliteOpenMode.ReadWrite, foreignKeys: false);
+        ResolveDuplicateActivePatients(connection);
+        CleanupClinicOpenDays(connection);
+    }
+
+    private static void ResolveDuplicateActivePatients(SqliteConnection connection)
+    {
+        var now = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+        int ResolveBy(string column)
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = $"""
+                UPDATE patients SET deleted_utc=$now, updated_utc=$now
+                WHERE deleted_utc IS NULL AND id NOT IN (
+                  SELECT MIN(id) FROM patients WHERE deleted_utc IS NULL GROUP BY {column}
+                );
+                """;
+            command.Parameters.AddWithValue("$now", now);
+            return command.ExecuteNonQuery();
+        }
+
+        var affected = ResolveBy("national_id") + ResolveBy("mobile");
+        if (affected <= 0) return;
+
+        using var audit = connection.CreateCommand();
+        audit.CommandText = "INSERT INTO audit_log(at_utc,action,detail) VALUES($now,'recovery.duplicates',$detail);";
+        audit.Parameters.AddWithValue("$now", now);
+        audit.Parameters.AddWithValue("$detail", $"تم تعطيل {affected} سجل مريض مكرر أثناء الاستعادة مع الإبقاء على البيانات.");
+        audit.ExecuteNonQuery();
+    }
+
+    private static void CleanupClinicOpenDays(SqliteConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            DELETE FROM clinic_open_days
+            WHERE NOT EXISTS (
+              SELECT 1 FROM appointments a
+              WHERE a.clinic_id=clinic_open_days.clinic_id
+                AND a.deleted_utc IS NULL AND a.status <> 'cancelled'
+                AND a.starts_at_local >= clinic_open_days.open_date || ' 00:00'
+                AND a.starts_at_local < date(clinic_open_days.open_date, '+1 day') || ' 00:00'
+            );
+            """;
+        command.ExecuteNonQuery();
     }
 
     private static HashSet<string> ReadColumns(
@@ -784,10 +903,16 @@ public static class Database
     private static void VerifyDatabase(string databaseFile)
     {
         using var connection = OpenDatabase(databaseFile, SqliteOpenMode.ReadWrite, foreignKeys: true);
-        using var command = connection.CreateCommand();
-        command.CommandText = "PRAGMA quick_check;";
-        if (!string.Equals(command.ExecuteScalar()?.ToString(), "ok", StringComparison.OrdinalIgnoreCase))
+        using var quick = connection.CreateCommand();
+        quick.CommandText = "PRAGMA quick_check;";
+        if (!string.Equals(quick.ExecuteScalar()?.ToString(), "ok", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("فشل فحص قاعدة البيانات المعاد بناؤها.");
+
+        using var foreignKeys = connection.CreateCommand();
+        foreignKeys.CommandText = "PRAGMA foreign_key_check;";
+        using var invalid = foreignKeys.ExecuteReader();
+        if (invalid.Read())
+            throw new InvalidOperationException("توجد مراجع غير صالحة بين جداول قاعدة البيانات المعاد بناؤها.");
     }
 
     private static void ReplaceDatabaseWithRebuiltCopy(string rebuilt, string quarantine)
@@ -825,6 +950,8 @@ public static class Database
 
     public static void CreateLegacyRecoveryFixture()
     {
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("SAUDI_PATIENT_DESK_DATA_ROOT")))
+            throw new InvalidOperationException("رفض إنشاء بيانات اختبار الاستعادة خارج مسار اختبار معزول.");
         TryDelete(AppPaths.DatabaseFile + "-wal");
         TryDelete(AppPaths.DatabaseFile + "-shm");
         TryDelete(AppPaths.DatabaseFile);
@@ -840,6 +967,21 @@ public static class Database
             patient.Parameters.AddWithValue("$now", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
             patient.ExecuteNonQuery();
         }
+        using (var legacy = connection.CreateCommand())
+        {
+            legacy.CommandText = """
+                UPDATE schema_info SET version=5;
+                PRAGMA writable_schema=ON;
+                INSERT INTO sqlite_master(type,name,tbl_name,rootpage,sql)
+                VALUES(
+                  'index','ux_legacy_broken_is','appointments',0,
+                  'CREATE UNIQUE INDEX ux_legacy_broken_is ON appointments(starts_at_local, doctor_id) WHERE deleted_utc IS NULL AND status=''scheduled'' AND IS doctor_id NOT NULL'
+                );
+                PRAGMA schema_version=99;
+                PRAGMA writable_schema=OFF;
+                """;
+            legacy.ExecuteNonQuery();
+        }
     }
 
     public static void VerifyLegacyRecoveryFixture()
@@ -849,5 +991,10 @@ public static class Database
         command.CommandText = "SELECT COUNT(*) FROM patients WHERE file_number='A-9001';";
         if (Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture) != 1)
             throw new InvalidOperationException("لم تُحفظ بيانات اختبار الاستعادة.");
+
+        using var broken = connection.CreateCommand();
+        broken.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE name='ux_legacy_broken_is';";
+        if (Convert.ToInt32(broken.ExecuteScalar(), CultureInfo.InvariantCulture) != 0)
+            throw new InvalidOperationException("لم يُحذف تعريف الفهرس القديم غير الصالح.");
     }
 }
