@@ -70,7 +70,7 @@ public sealed class SmartAssistService
         {
             var date = firstDate.AddDays(dayOffset);
             var day = date.ToDateTime(TimeOnly.MinValue);
-            if (IsWeeklyClosed(day) || IsCustomClosed(connection, day)) continue;
+            if (_settings.IsWeeklyClosed(day) || IsCustomClosed(connection, day)) continue;
             foreach (var slot in hours.SlotStarts())
             {
                 var candidate = date.ToDateTime(TimeOnly.FromTimeSpan(slot));
@@ -181,9 +181,6 @@ public sealed class SmartAssistService
         return lines;
     }
 
-    private static bool IsWeeklyClosed(DateTime date) =>
-        date.DayOfWeek is DayOfWeek.Friday or DayOfWeek.Saturday;
-
     private static bool IsCustomClosed(SqliteConnection connection, DateTime date)
     {
         using var command = connection.CreateCommand();
@@ -202,12 +199,12 @@ public sealed class SmartAssistService
         using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT 1 FROM appointments
-            WHERE deleted_utc IS NULL AND status <> 'cancelled'
+            WHERE deleted_utc IS NULL AND status='scheduled'
               AND starts_at_local=$start
               AND ($except IS NULL OR id <> $except)
               AND (
-                    ($doctor IS NOT NULL AND (doctor_id=$doctor OR staff_id=$doctor))
-                 OR ($specialist IS NOT NULL AND (specialist_id=$specialist OR staff_id=$specialist))
+                    ($doctor IS NOT NULL AND doctor_id=$doctor)
+                 OR ($specialist IS NOT NULL AND specialist_id=$specialist)
                  OR ($doctor IS NULL AND $specialist IS NULL)
               )
             LIMIT 1;

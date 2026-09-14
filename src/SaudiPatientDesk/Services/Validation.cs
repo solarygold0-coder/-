@@ -39,10 +39,10 @@ public static partial class Validation
         return null;
     }
 
-    public static string? Appointment(DateTime value, bool requireFuture = true)
+    public static string? Appointment(DateTime value, SettingsService settings, bool requireFuture = true)
     {
-        if (value.DayOfWeek is DayOfWeek.Friday or DayOfWeek.Saturday)
-            return "لا يمكن حجز موعد يوم الجمعة أو السبت.";
+        if (settings.IsWeeklyClosed(value))
+            return "لا يمكن الحجز في يوم الإغلاق الأسبوعي المحدد في الإعدادات.";
         if (requireFuture && value <= DateTime.Now)
             return "يجب أن يكون الموعد في وقت لاحق.";
         return null;

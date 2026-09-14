@@ -2,7 +2,7 @@ name: Build signed version-isolated MSIX
 
 on:
   push:
-    branches: [main]
+    branches: [main, codex/v7.1.1-patches]
     paths:
       - .github/workflows/build-msix-windows.yml
       - src/**
@@ -167,6 +167,7 @@ jobs:
           $release = "out/SaudiPatientDesk-v$env:DISPLAY_VERSION-MSIX"
           New-Item -ItemType Directory -Force -Path $release | Out-Null
           Copy-Item "out/msix-release/SaudiPatientDesk-v$env:PACKAGE_VERSION-x64.msix" $release
+          Copy-Item 'out/SaudiPatientDesk-win-x64/SaudiPatientDesk.exe' $release
           Copy-Item $env:SIGNING_CER_PATH "$release/SaudiPatientDesk.cer"
           Copy-Item 'scripts/05-install-msix.ps1' $release
           Copy-Item 'scripts/README-MSIX_AR.md' $release

@@ -29,16 +29,24 @@ public partial class App : Application
 
         DispatcherUnhandledException += (_, args) =>
         {
-            MessageBox.Show("حدث خطأ غير متوقع. لم تُفقد بياناتك.\n" + args.Exception.Message,
+            var recoverable = args.Exception is InvalidOperationException or ArgumentException or FormatException;
+            var diagnostic = WriteDiagnostic("runtime-error", args.Exception);
+            MessageBox.Show(
+                (recoverable ? "تعذر إكمال العملية، ويمكنك متابعة استخدام البرنامج." : "حدث خطأ خطير وسيُغلق البرنامج لحماية البيانات.") +
+                "\n" + args.Exception.Message + "\n\nسجل التشخيص: " + diagnostic,
                 "تنبيه", MessageBoxButton.OK, MessageBoxImage.Error);
-            args.Handled = true;
+            args.Handled = recoverable;
         };
 
         try
         {
             AppPaths.EnsureCreated();
             if (recoveryHealthCheck)
+            {
+                if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("SAUDI_PATIENT_DESK_DATA_ROOT")))
+                    throw new InvalidOperationException("اختبار الاستعادة يتطلب مسار بيانات اختبار معزولاً.");
                 Database.CreateLegacyRecoveryFixture();
+            }
             Database.Initialize(recoveryHealthCheck);
             if (healthCheck || recoveryHealthCheck)
             {
@@ -52,6 +60,7 @@ public partial class App : Application
             MainWindow = new MainWindow();
             if (uiHealthCheck)
             {
+                MainWindow.VerifyUiHealth();
                 MainWindow.Close();
                 Shutdown(0);
                 return;
@@ -66,7 +75,7 @@ public partial class App : Application
                 {
                     File.WriteAllText(
                         Path.Combine(AppPaths.Root, "health-error.txt"),
-                        ex.ToString());
+                        BuildDiagnostic(ex));
                 }
                 catch
                 {
@@ -74,12 +83,33 @@ public partial class App : Application
                 Shutdown(-1);
                 return;
             }
-            var errorFile = Path.Combine(AppPaths.Root, $"startup-error-{AppInfo.Version}.txt");
-            try { File.WriteAllText(errorFile, ex.ToString()); } catch { }
+            var errorFile = WriteDiagnostic("startup-error", ex);
             MessageBox.Show($"تعذر تشغيل البرنامج أو فتح قاعدة البيانات — الإصدار {AppInfo.Version}.\n" +
                             ex.Message + "\n\nسجل التشخيص: " + errorFile,
                 "تعذر التشغيل", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(-1);
         }
+    }
+
+    private static string WriteDiagnostic(string prefix, Exception exception)
+    {
+        var errorFile = Path.Combine(AppPaths.Root, $"{prefix}-{AppInfo.Version}.txt");
+        try { File.WriteAllText(errorFile, BuildDiagnostic(exception)); } catch { }
+        return errorFile;
+    }
+
+    private static string BuildDiagnostic(Exception exception)
+    {
+        var text = exception + Environment.NewLine + Environment.NewLine + "آخر 20 عملية:" + Environment.NewLine;
+        try
+        {
+            text += string.Join(Environment.NewLine,
+                Database.RecentLog(20).Select(row => $"{row.At} | {row.Action} | {row.Detail}"));
+        }
+        catch (Exception auditError)
+        {
+            text += "تعذر قراءة سجل العمليات: " + auditError.Message;
+        }
+        return text;
     }
 }

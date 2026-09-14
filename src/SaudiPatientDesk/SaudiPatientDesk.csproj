@@ -10,9 +10,9 @@
     <Product>نظام سجلات المرضى السعودي</Product>
     <Company>Saudi Patient Desk</Company>
     <Description>تطبيق Windows عربي من اليمين إلى اليسار لإدارة المراجعين والمواعيد بتقويم ميلادي.</Description>
-    <Version>7.1.0</Version>
-    <AssemblyVersion>7.1.0.0</AssemblyVersion>
-    <FileVersion>7.1.0.0</FileVersion>
+    <Version>7.1.1</Version>
+    <AssemblyVersion>7.1.1.0</AssemblyVersion>
+    <FileVersion>7.1.1.0</FileVersion>
     <!-- Keep the Windows exe icon here. Clinic logo is a separate runtime file and must NOT replace this. -->
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
