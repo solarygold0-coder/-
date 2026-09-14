@@ -12,6 +12,10 @@ on:
       - scripts/README-MSIX_AR.md
   workflow_dispatch:
 
+concurrency:
+  group: msix-main
+  cancel-in-progress: true
+
 jobs:
   build-sign-verify-msix:
     runs-on: windows-latest
@@ -92,8 +96,7 @@ jobs:
             throw "Certificate subject does not match the permanent MSIX publisher: $($imported.Subject)"
           }
           Export-Certificate -Cert $imported -FilePath $cerPath -Type CERT | Out-Null
-          Import-Certificate -FilePath $cerPath -CertStoreLocation 'Cert:\CurrentUser\Root' | Out-Null
-          Import-Certificate -FilePath $cerPath -CertStoreLocation 'Cert:\CurrentUser\TrustedPeople' | Out-Null
+          Import-Certificate -FilePath $cerPath -CertStoreLocation 'Cert:\LocalMachine\TrustedPeople' | Out-Null
 
           "SIGNING_PFX_PATH=$pfxPath" >> $env:GITHUB_ENV
           "SIGNING_CER_PATH=$cerPath" >> $env:GITHUB_ENV

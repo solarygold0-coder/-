@@ -27,20 +27,32 @@ if ([string]::IsNullOrWhiteSpace($CertificatePath)) {
 if (-not (Test-Path $PackagePath)) { throw "ملف التثبيت غير موجود: $PackagePath" }
 if (-not (Test-Path $CertificatePath)) { throw "ملف الشهادة غير موجود: $CertificatePath" }
 
+$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+$isAdministrator = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdministrator) {
+    Write-Host "سيطلب ويندوز الآن صلاحية المسؤول لتثبيت شهادة الحزمة." -ForegroundColor Yellow
+    $elevatedArguments = @(
+        '-NoProfile',
+        '-ExecutionPolicy', 'Bypass',
+        '-File', ('"{0}"' -f $MyInvocation.MyCommand.Path),
+        '-PackagePath', ('"{0}"' -f $PackagePath),
+        '-CertificatePath', ('"{0}"' -f $CertificatePath)
+    )
+    $elevated = Start-Process -FilePath 'powershell.exe' -Verb RunAs `
+        -ArgumentList $elevatedArguments -Wait -PassThru
+    exit $elevated.ExitCode
+}
+
 $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($CertificatePath)
-$trustedRoot = Get-ChildItem "Cert:\CurrentUser\Root\$($certificate.Thumbprint)" -ErrorAction SilentlyContinue
-if ($null -eq $trustedRoot) {
-    Write-Warning "يلزم إضافة شهادة Saudi Patient Desk الذاتية إلى مخزن الجذر الموثوق للمستخدم الحالي كي يقبل ويندوز حزمة MSIX."
+$trusted = Get-ChildItem "Cert:\LocalMachine\TrustedPeople\$($certificate.Thumbprint)" -ErrorAction SilentlyContinue
+if ($null -eq $trusted) {
+    Write-Warning "يلزم إضافة شهادة Saudi Patient Desk إلى مخزن الأشخاص الموثوق بهم على هذا الكمبيوتر كي يقبل ويندوز حزمة MSIX."
     Write-Warning "لا توافق إلا إذا حصلت على هذه الملفات من الإصدار الرسمي للمشروع."
     $consent = Read-Host "اكتب أوافق للمتابعة"
     if ($consent.Trim() -ne "أوافق") {
         throw "أُلغي التثبيت: لم تتم الموافقة على تثبيت الشهادة."
     }
-    Import-Certificate -FilePath $CertificatePath -CertStoreLocation "Cert:\CurrentUser\Root" | Out-Null
-}
-$trusted = Get-ChildItem "Cert:\CurrentUser\TrustedPeople\$($certificate.Thumbprint)" -ErrorAction SilentlyContinue
-if ($null -eq $trusted) {
-    Import-Certificate -FilePath $CertificatePath -CertStoreLocation "Cert:\CurrentUser\TrustedPeople" | Out-Null
+    Import-Certificate -FilePath $CertificatePath -CertStoreLocation "Cert:\LocalMachine\TrustedPeople" | Out-Null
 }
 
 $installed = Get-AppxPackage -Name "SaudiPatientDesk" | Sort-Object Version -Descending | Select-Object -First 1
