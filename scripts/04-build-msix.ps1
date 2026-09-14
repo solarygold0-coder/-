@@ -156,4 +156,5 @@ Verify-SignedFile $executable
 Verify-SignedFile $PackagePath
 
 $certificate.Dispose()
+$global:LASTEXITCODE = 0
 Write-Host "MSIX created and verified: $PackagePath" -ForegroundColor Green
