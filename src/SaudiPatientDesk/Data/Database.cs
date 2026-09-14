@@ -1,11 +1,14 @@
 using Microsoft.Data.Sqlite;
 using System.Globalization;
 using System.IO;
+using SaudiPatientDesk;
 
 namespace SaudiPatientDesk.Data;
 
 public static class Database
 {
+    private const int SupportedSchemaVersion = 5;
+
     public static SqliteConnection Open()
         => OpenDatabase(AppPaths.DatabaseFile, SqliteOpenMode.ReadWriteCreate, foreignKeys: true);
 
@@ -109,6 +112,7 @@ public static class Database
     private static void InitializeCore(string databaseFile)
     {
         using var connection = OpenDatabase(databaseFile, SqliteOpenMode.ReadWriteCreate, foreignKeys: true);
+        EnsureSchemaIsNotNewer(connection);
         using var command = connection.CreateCommand();
         command.CommandText = """
             PRAGMA journal_mode=WAL;
@@ -501,7 +505,7 @@ public static class Database
         AppPaths.EnsureCreated();
         var backup = Path.Combine(
             AppPaths.Backups,
-            $"قبل-ترحيل-الإصدار-7.0.11-{DateTime.Now:yyyyMMdd-HHmmss}.sqlite3");
+            $"قبل-ترحيل-الإصدار-{AppInfo.Version}-{DateTime.Now:yyyyMMdd-HHmmss}.sqlite3");
         using var destination = new SqliteConnection(
             new SqliteConnectionStringBuilder { DataSource = backup }.ToString());
         destination.Open();
@@ -596,6 +600,21 @@ public static class Database
         alter.ExecuteNonQuery();
     }
 
+    private static void EnsureSchemaIsNotNewer(SqliteConnection connection)
+    {
+        if (!TableExists(connection, "schema_info")) return;
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COALESCE(MAX(version), 0) FROM schema_info;";
+        var databaseVersion = Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture);
+        if (databaseVersion > SupportedSchemaVersion)
+        {
+            throw new InvalidOperationException(
+                $"قاعدة البيانات أُنشئت بإصدار أحدث (مخطط {databaseVersion}). " +
+                "شغّل آخر إصدار من نظام سجلات المرضى لحماية البيانات.");
+        }
+    }
+
     private static bool IsRecoverableLegacySchemaError(SqliteException exception)
         => exception.SqliteErrorCode == 1
            || exception.Message.Contains("near \"IS\"", StringComparison.OrdinalIgnoreCase)
@@ -606,8 +625,8 @@ public static class Database
     {
         AppPaths.EnsureCreated();
         var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture);
-        var safetyBackup = Path.Combine(AppPaths.Backups, $"قبل-الإصلاح-7.0.11-{stamp}.sqlite3");
-        var quarantine = Path.Combine(AppPaths.Backups, $"قاعدة-قديمة-7.0.11-{stamp}.sqlite3");
+        var safetyBackup = Path.Combine(AppPaths.Backups, $"قبل-الإصلاح-{AppInfo.Version}-{stamp}.sqlite3");
+        var quarantine = Path.Combine(AppPaths.Backups, $"قاعدة-قديمة-{AppInfo.Version}-{stamp}.sqlite3");
         var rebuilt = Path.Combine(AppPaths.Root, $"rebuild-{Guid.NewGuid():N}.sqlite3");
 
         try

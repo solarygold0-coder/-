@@ -29,6 +29,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        VersionText.Text = $"{AppInfo.Version} • ميلادي فقط";
         ShowPanel("dashboard");
         Loc.ApplyToWindow(this);
         ClinicNameBox.Text = _settings.Get("clinic_name", "");

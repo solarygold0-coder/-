@@ -1,14 +1,9 @@
-name: Build and self-sign Windows application
+name: Legacy self-signed portable EXE (manual only)
 # Produces the icon-enabled clinic package and its public trust certificate.
 # Application icon asset: Windows-compatible ICO with 128 64 48 32 and 16 pixel frames.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/build-self-signed-windows.yml
-      - src/**
-      - scripts/**
+  workflow_dispatch:
 
 jobs:
   build-sign-verify:
@@ -113,7 +108,7 @@ jobs:
           $certificate = New-SelfSignedCertificate `
             -Type Custom `
             -Subject 'CN=Saudi Patient Desk' `
-            -FriendlyName 'Saudi Patient Desk Code Signing 7.0.11' `
+            -FriendlyName 'Saudi Patient Desk Code Signing 7.1.0' `
             -CertStoreLocation 'Cert:\CurrentUser\My' `
             -KeyAlgorithm RSA `
             -KeyLength 3072 `
@@ -215,10 +210,10 @@ jobs:
           Copy-Item scripts/03-install-certificate.ps1 out/SaudiPatientDesk-win-x64/ -Force
           Copy-Item scripts/README-SIGNING_AR.md out/SaudiPatientDesk-win-x64/ -Force
           Compress-Archive -Path out/SaudiPatientDesk-win-x64/* `
-            -DestinationPath out/SaudiPatientDesk-v7.0.11-win-x64-self-signed.zip
+            -DestinationPath out/SaudiPatientDesk-v7.1.0-win-x64-self-signed.zip
 
       - uses: actions/upload-artifact@v4
         with:
-          name: SaudiPatientDesk-v7.0.11-win-x64-self-signed
-          path: out/SaudiPatientDesk-v7.0.11-win-x64-self-signed.zip
+          name: SaudiPatientDesk-v7.1.0-win-x64-self-signed
+          path: out/SaudiPatientDesk-v7.1.0-win-x64-self-signed.zip
           if-no-files-found: error

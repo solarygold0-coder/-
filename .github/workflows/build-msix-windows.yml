@@ -1,0 +1,148 @@
+name: Build signed version-isolated MSIX
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/build-msix-windows.yml
+      - src/**
+      - packaging/**
+      - scripts/04-build-msix.ps1
+      - scripts/05-install-msix.ps1
+      - scripts/README-MSIX_AR.md
+  workflow_dispatch:
+
+jobs:
+  build-sign-verify-msix:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    env:
+      PERSISTENT_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 }}
+      PERSISTENT_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Read the single source application version
+        id: version
+        shell: pwsh
+        run: |
+          [xml]$project = Get-Content 'src/SaudiPatientDesk/SaudiPatientDesk.csproj' -Raw
+          $displayVersion = [string]($project.Project.PropertyGroup.Version | Select-Object -First 1)
+          $versionParts = @($displayVersion.Split('.'))
+          while ($versionParts.Count -lt 4) { $versionParts += '0' }
+          if ($versionParts.Count -gt 4) { throw 'Application version has more than four parts.' }
+          $packageVersion = $versionParts -join '.'
+          "DISPLAY_VERSION=$displayVersion" >> $env:GITHUB_ENV
+          "PACKAGE_VERSION=$packageVersion" >> $env:GITHUB_ENV
+          "display=$displayVersion" >> $env:GITHUB_OUTPUT
+
+      - name: Reject forbidden legacy authentication code
+        shell: pwsh
+        run: |
+          $patterns = 'LoginWindow|PasswordWindow|AccountManagerWindow|UserEditorWindow|اسم مستخدم|كلمة مرور|مدير النظام'
+          $matches = Get-ChildItem src -Recurse -File | Select-String -Pattern $patterns
+          if ($matches) { $matches | Format-Table; throw 'Forbidden legacy authentication code detected.' }
+
+      - name: Prepare persistent or temporary signing certificate
+        id: certificate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pfxPath = Join-Path $env:RUNNER_TEMP 'SaudiPatientDesk.pfx'
+          $cerPath = Join-Path $env:RUNNER_TEMP 'SaudiPatientDesk.cer'
+
+          if (-not [string]::IsNullOrWhiteSpace($env:PERSISTENT_PFX_BASE64) -and
+              -not [string]::IsNullOrWhiteSpace($env:PERSISTENT_PFX_PASSWORD)) {
+            [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:PERSISTENT_PFX_BASE64))
+            $password = $env:PERSISTENT_PFX_PASSWORD
+            $mode = 'persistent'
+          } else {
+            $password = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(36))
+            Write-Output "::add-mask::$password"
+            $imported = New-SelfSignedCertificate `
+              -Type Custom `
+              -Subject 'CN=Saudi Patient Desk' `
+              -FriendlyName 'Saudi Patient Desk development signing' `
+              -CertStoreLocation 'Cert:\CurrentUser\My' `
+              -KeyAlgorithm RSA `
+              -KeyLength 3072 `
+              -HashAlgorithm SHA256 `
+              -KeyExportPolicy Exportable `
+              -KeyUsage DigitalSignature `
+              -NotBefore (Get-Date).AddMinutes(-10) `
+              -NotAfter (Get-Date).AddYears(5) `
+              -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3')
+            $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
+            Export-PfxCertificate -Cert $imported -FilePath $pfxPath -Password $securePassword | Out-Null
+            $mode = 'temporary-development'
+          }
+
+          if ($mode -eq 'persistent') {
+            $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
+            $imported = Import-PfxCertificate -FilePath $pfxPath -Password $securePassword `
+              -CertStoreLocation 'Cert:\CurrentUser\My' -Exportable
+          }
+          if ($imported.Subject -ne 'CN=Saudi Patient Desk') {
+            throw "Certificate subject does not match the permanent MSIX publisher: $($imported.Subject)"
+          }
+          Export-Certificate -Cert $imported -FilePath $cerPath -Type CERT | Out-Null
+          Import-Certificate -FilePath $cerPath -CertStoreLocation 'Cert:\CurrentUser\Root' | Out-Null
+          Import-Certificate -FilePath $cerPath -CertStoreLocation 'Cert:\CurrentUser\TrustedPeople' | Out-Null
+
+          "SIGNING_PFX_PATH=$pfxPath" >> $env:GITHUB_ENV
+          "SIGNING_CER_PATH=$cerPath" >> $env:GITHUB_ENV
+          "SIGNING_PFX_PASSWORD=$password" >> $env:GITHUB_ENV
+          "mode=$mode" >> $env:GITHUB_OUTPUT
+          Write-Host "Signing mode: $mode"
+
+      - name: Build sign package and verify
+        shell: pwsh
+        run: |
+          ./scripts/04-build-msix.ps1 `
+            -PackageVersion $env:PACKAGE_VERSION `
+            -PfxPath $env:SIGNING_PFX_PATH `
+            -PfxPassword $env:SIGNING_PFX_PASSWORD
+
+      - name: Run database and full UI startup tests
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out/smoke-localapp | Out-Null
+          $env:LOCALAPPDATA = (Resolve-Path out/smoke-localapp).Path
+          $env:SAUDI_PATIENT_DESK_DATA_ROOT = (Resolve-Path out/smoke-localapp).Path
+          foreach ($argument in @('--health-check', '--health-check-recovery', '--health-check-ui')) {
+            $process = Start-Process out/SaudiPatientDesk-win-x64/SaudiPatientDesk.exe `
+              -ArgumentList $argument -Wait -PassThru
+            if ($process.ExitCode -ne 0) {
+              $errorFile = Get-ChildItem out/smoke-localapp -Filter '*error*.txt' -Recurse | Select-Object -First 1
+              if ($null -ne $errorFile) { Get-Content $errorFile.FullName }
+              throw "Health check failed for $argument with exit code $($process.ExitCode)."
+            }
+          }
+
+      - name: Assemble installer release
+        shell: pwsh
+        run: |
+          $release = "out/SaudiPatientDesk-v$env:DISPLAY_VERSION-MSIX"
+          New-Item -ItemType Directory -Force -Path $release | Out-Null
+          Copy-Item "out/msix-release/SaudiPatientDesk-v$env:PACKAGE_VERSION-x64.msix" $release
+          Copy-Item $env:SIGNING_CER_PATH "$release/SaudiPatientDesk.cer"
+          Copy-Item 'scripts/05-install-msix.ps1' $release
+          Copy-Item 'scripts/README-MSIX_AR.md' $release
+          @(
+            "PackageVersion: $env:PACKAGE_VERSION"
+            "PackageIdentityName: SaudiPatientDesk"
+            "Publisher: CN=Saudi Patient Desk"
+            "SigningMode: ${{ steps.certificate.outputs.mode }}"
+            "SignedCommit: $env:GITHUB_SHA"
+          ) | Set-Content "$release/package-info.txt" -Encoding utf8
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SaudiPatientDesk-v${{ steps.version.outputs.display }}-MSIX
+          path: out/SaudiPatientDesk-v${{ steps.version.outputs.display }}-MSIX
+          if-no-files-found: error

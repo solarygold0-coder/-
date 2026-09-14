@@ -1,8 +1,6 @@
-name: Build clean Windows application
+name: Legacy portable EXE (manual only)
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -39,10 +37,10 @@ jobs:
 
       - name: Package
         shell: pwsh
-        run: Compress-Archive -Path out/SaudiPatientDesk-win-x64/* -DestinationPath out/SaudiPatientDesk-v7.0.11-win-x64.zip
+        run: Compress-Archive -Path out/SaudiPatientDesk-win-x64/* -DestinationPath out/SaudiPatientDesk-v7.1.0-win-x64.zip
 
       - uses: actions/upload-artifact@v4
         with:
-          name: SaudiPatientDesk-v7.0.11-win-x64
-          path: out/SaudiPatientDesk-v7.0.11-win-x64.zip
+          name: SaudiPatientDesk-v7.1.0-win-x64
+          path: out/SaudiPatientDesk-v7.1.0-win-x64.zip
           if-no-files-found: error

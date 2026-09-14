@@ -1,4 +1,4 @@
-# Build Saudi Patient Desk 7.0.11 on Windows 10/11 x64
+# Build Saudi Patient Desk 7.1.0 on Windows 10/11 x64
 # Requires: .NET 10 SDK  https://dotnet.microsoft.com/download
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot

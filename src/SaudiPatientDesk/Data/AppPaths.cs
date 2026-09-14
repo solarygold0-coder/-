@@ -4,7 +4,8 @@ namespace SaudiPatientDesk.Data;
 
 public static class AppPaths
 {
-    // مسار جديد. لا يقرأ Generation6 ولا أي قاعدة تالفة سابقة.
+    // مسار بيانات ثابت ومستقل عن رقم إصدار البرنامج وحزمة MSIX.
+    // لا تغيّر هذا المسار عند التحديث حتى لا تتجزأ سجلات المرضى بين الإصدارات.
     public static string Root { get; } = ResolveRoot();
 
     public static string DatabaseFile => Path.Combine(Root, "clinic-records.sqlite3");

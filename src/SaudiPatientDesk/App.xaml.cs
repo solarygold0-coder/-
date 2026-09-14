@@ -74,9 +74,9 @@ public partial class App : Application
                 Shutdown(-1);
                 return;
             }
-            var errorFile = Path.Combine(AppPaths.Root, "startup-error-7.0.11.txt");
+            var errorFile = Path.Combine(AppPaths.Root, $"startup-error-{AppInfo.Version}.txt");
             try { File.WriteAllText(errorFile, ex.ToString()); } catch { }
-            MessageBox.Show("تعذر تشغيل البرنامج أو فتح قاعدة البيانات — الإصدار 7.0.11.\n" +
+            MessageBox.Show($"تعذر تشغيل البرنامج أو فتح قاعدة البيانات — الإصدار {AppInfo.Version}.\n" +
                             ex.Message + "\n\nسجل التشخيص: " + errorFile,
                 "تعذر التشغيل", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(-1);
