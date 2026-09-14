@@ -57,15 +57,16 @@ public partial class App : Application
                 return;
             }
             Loc.Load(new SettingsService());
-            MainWindow = new MainWindow();
+            var mainWindow = new MainWindow();
+            MainWindow = mainWindow;
             if (uiHealthCheck)
             {
-                MainWindow.VerifyUiHealth();
-                MainWindow.Close();
+                mainWindow.VerifyUiHealth();
+                mainWindow.Close();
                 Shutdown(0);
                 return;
             }
-            MainWindow.Show();
+            mainWindow.Show();
         }
         catch (Exception ex)
         {
